@@ -1,12 +1,12 @@
 ---
-name: jr-orchestrator
+name: active-orchestrator
 description: >
   Thin orchestrator for the project foundation flow. Runs `openspec init`, then
   dispatches each foundation phase to its dedicated sub-skill in §4.2 order:
   kb-creator → roadmap-generator → find-skill → skill-registry → agent-instruction.
-  Owns the shared state file (.jr-orchestrator-state.json) and the `step` field only.
-  Trigger: /jr-orchestrator:init, /jr-orchestrator:kb, /jr-orchestrator:rules,
-  /jr-orchestrator:openspec, /jr-orchestrator:devops, /jr-orchestrator:find-skill —
+  Owns the shared state file (.active-orchestrator-state.json) and the `step` field only.
+  Trigger: /active-orchestrator:init, /active-orchestrator:kb, /active-orchestrator:rules,
+  /active-orchestrator:openspec, /active-orchestrator:devops, /active-orchestrator:find-skill —
   or when the user wants to start a new project from scratch using the
   SDD/OpenSpec foundation flow.
 license: MIT
@@ -15,12 +15,12 @@ metadata:
   version: "2.1"
 ---
 
-# jr-orchestrator — thin orchestrator
+# active-orchestrator — thin orchestrator
 
 You are a **thin orchestrator**. Your ONLY jobs are:
 
 1. Detect which entrypoint was invoked (Step 0).
-2. Manage the shared state file `.jr-orchestrator-state.json` — you own the file and the `step` field.
+2. Manage the shared state file `.active-orchestrator-state.json` — you own the file and the `step` field.
 3. Run `openspec init` (Step 1).
 4. Dispatch each foundation phase to its dedicated sub-skill in §4.2 order (Step 2).
 5. **Hold a checkpoint at every phase boundary** — never run phases back-to-back without stopping (§ Inter-phase checkpoint protocol).
@@ -38,16 +38,16 @@ You are a **thin orchestrator**. Your ONLY jobs are:
 2. **NEVER ask the user strategic questions** (system_type, scale, stack, problem). Those questions belong to `kb-creator`.
 3. **Own `step` and nothing else.** Only write `version`, `step`, `owner` to the state. Sub-skills write their own sections.
 4. **Check sub-skill presence before dispatch.** If missing → offer install → degrade if declined.
-5. **Resume by default.** If `.jr-orchestrator-state.json` exists with `step != "done"`, ask to resume or restart.
+5. **Resume by default.** If `.active-orchestrator-state.json` exists with `step != "done"`, ask to resume or restart.
 6. **STOP and wait after each AskUserQuestion call.** Never assume the answer.
-7. **NEVER chain phases without a checkpoint.** Every phase boundary holds a checkpoint (§ Inter-phase checkpoint protocol). You never advance `step` to the next phase without the user's explicit "Continuar". This applies in the full flow (`/jr-orchestrator:init`); standalone single-phase commands run only their phase and stop.
+7. **NEVER chain phases without a checkpoint.** Every phase boundary holds a checkpoint (§ Inter-phase checkpoint protocol). You never advance `step` to the next phase without the user's explicit "Continuar". This applies in the full flow (`/active-orchestrator:init`); standalone single-phase commands run only their phase and stop.
 8. **NEVER install anything autonomously.** `find-skill` recommends; the user picks; only then you install. Installing into the user's global skills is a HIGH-governance side-effect — propose and wait.
 
 ---
 
 ## Shared State Contract
 
-`.jr-orchestrator-state.json` lives at the project root. Schema **version 3**. The `kb`/`roadmap`/`skills`/`agents` sections are the frozen contract C-13b/c consume; `registry` was added additively (no C-13b/c sub-skill reads it) and bumped the contract from 2 → 3.
+`.active-orchestrator-state.json` lives at the project root. Schema **version 3**. The `kb`/`roadmap`/`skills`/`agents` sections are the frozen contract C-13b/c consume; `registry` was added additively (no C-13b/c sub-skill reads it) and bumped the contract from 2 → 3.
 
 > Note: the `"version": 3` below is the **state-schema contract version** (bump only when the shared state shape changes). It is NOT the skill release version in the frontmatter (`version: "2.0"`) — the two version independently.
 
@@ -55,7 +55,7 @@ You are a **thin orchestrator**. Your ONLY jobs are:
 {
   "version": 3,
   "step": "openspec|kb|roadmap|find-skill|registry|agents|done",
-  "owner": "jr-orchestrator",
+  "owner": "active-orchestrator",
   "kb": {
     "created_by": "kb-creator",
     "source": "interactive|ingest",
@@ -94,7 +94,7 @@ You are a **thin orchestrator**. Your ONLY jobs are:
 
 | Section | Owner | Writes |
 |---|---|---|
-| `version`, `step`, `owner` | `jr-orchestrator` (this skill) | Updated after each phase completes |
+| `version`, `step`, `owner` | `active-orchestrator` (this skill) | Updated after each phase completes |
 | `kb` (including `kb.discovery`) | `kb-creator` | After discovery + KB generation |
 | `roadmap` | `roadmap-generator` | After CHANGES.md is produced |
 | `skills` | `find-skill` | After recommendations + install |
@@ -107,11 +107,11 @@ You are a **thin orchestrator**. Your ONLY jobs are:
 
 At the start of every command invocation:
 
-1. Check if `.jr-orchestrator-state.json` exists and load it.
+1. Check if `.active-orchestrator-state.json` exists and load it.
 2. If it exists and `step != "done"`:
    - Via `AskUserQuestion` (single-select): "Hay una fundación en progreso (paso: `{step}`). ¿Continuamos desde ahí o empezamos de cero?" — options: "Continuar desde `{step}`" / "Empezar de cero".
    - On "continuar": jump to the step recorded in state, using persisted sections as context.
-   - On "de cero": delete `.jr-orchestrator-state.json`, start from Step 0.
+   - On "de cero": delete `.active-orchestrator-state.json`, start from Step 0.
 
 ---
 
@@ -121,13 +121,13 @@ Branch on which command fired:
 
 | Command | Jump to |
 |---|---|
-| `/jr-orchestrator:init` | Step 1 — full flow |
-| `/jr-orchestrator:kb` | Dispatch `kb-creator` directly (Step 2 — kb phase only) |
-| `/jr-orchestrator:rules` | Dispatch `agent-instruction` (rules/CLAUDE.md re-gen only) |
-| `/jr-orchestrator:openspec` | Step 1 — `openspec init` only |
-| `/jr-orchestrator:devops` | Dispatch `devops-scaffolder` sub-skill (optional, full mode). Sub-skill not yet built — see Foundation flow notes. |
-| `/jr-orchestrator:find-skill` | Dispatch `find-skill` directly |
-| `/jr-orchestrator:registry` | Dispatch `skill-registry` directly (rebuild `.atl/skill-registry.md` after skills change) |
+| `/active-orchestrator:init` | Step 1 — full flow |
+| `/active-orchestrator:kb` | Dispatch `kb-creator` directly (Step 2 — kb phase only) |
+| `/active-orchestrator:rules` | Dispatch `agent-instruction` (rules/CLAUDE.md re-gen only) |
+| `/active-orchestrator:openspec` | Step 1 — `openspec init` only |
+| `/active-orchestrator:devops` | Dispatch `devops-scaffolder` sub-skill (optional, full mode). Sub-skill not yet built — see Foundation flow notes. |
+| `/active-orchestrator:find-skill` | Dispatch `find-skill` directly |
+| `/active-orchestrator:registry` | Dispatch `skill-registry` directly (rebuild `.atl/skill-registry.md` after skills change) |
 | No command / direct `Skill` call | Default to full flow (Step 1) |
 
 Before branching: always load and apply resume logic above.
@@ -161,7 +161,7 @@ Before branching: always load and apply resume logic above.
 
 5. Write initial state file:
    ```json
-   { "version": 3, "step": "kb", "owner": "jr-orchestrator" }
+   { "version": 3, "step": "kb", "owner": "active-orchestrator" }
    ```
 
 6. **Checkpoint (post-phase advance gate):** confirm `openspec/` was scaffolded, then run the advance gate (§ Inter-phase checkpoint protocol → B). On "Continuar", advance to Step 2 (kb-creator). On "Parar", state is already persisted at `step = "kb"`.
@@ -203,12 +203,12 @@ The full flow NEVER runs phases back-to-back. Between **every** phase boundary y
 2. `AskUserQuestion` (single-select): **"Fase `{phase}` lista. ¿Cómo seguimos?"**
    - **"Continuar a `{next-phase}`"** → advance `step`, dispatch the next phase.
    - **"Ajustar — re-correr `{phase}`"** → ask what to change, re-dispatch the SAME phase with that feedback, then gate again. Do NOT advance `step`.
-   - **"Parar acá"** → persist state at the current `step`, tell the user how to resume (`/jr-orchestrator:init`), and exit gracefully.
+   - **"Parar acá"** → persist state at the current `step`, tell the user how to resume (`/active-orchestrator:init`), and exit gracefully.
 3. STOP and wait. Advance `step` ONLY on "Continuar".
 
 This post-phase gate runs after **every** phase: `openspec init` → kb-creator → roadmap-generator → find-skill (install) → skill-registry → agent-instruction.
 
-> Standalone single-phase commands (`/jr-orchestrator:kb`, `:rules`, `:find-skill`, `:registry`, `:openspec`) run ONLY their phase and stop — they don't chain, so they don't need the advance gate (the user already chose one phase). The checkpoint protocol governs the **full flow** (`/jr-orchestrator:init`).
+> Standalone single-phase commands (`/active-orchestrator:kb`, `:rules`, `:find-skill`, `:registry`, `:openspec`) run ONLY their phase and stop — they don't chain, so they don't need the advance gate (the user already chose one phase). The checkpoint protocol governs the **full flow** (`/active-orchestrator:init`).
 
 ---
 
@@ -222,17 +222,17 @@ Agent({
     ## Task
     Use the Skill tool to invoke \`<skill-name>\` for this project.
     ## Context
-    - Shared state: .jr-orchestrator-state.json (read it for prior phases' output)
+    - Shared state: .active-orchestrator-state.json (read it for prior phases' output)
     - Prior artifacts: <relevant paths — knowledge-base/, CHANGES.md, .atl/skill-registry.md>
     ## Instructions
     Follow the skill completely. When done, write your own section into
-    .jr-orchestrator-state.json and return a one-paragraph summary + the
+    .active-orchestrator-state.json and return a one-paragraph summary + the
     artifact paths produced.
   `
 })
 ```
 
-After a sub-agent returns: read `.jr-orchestrator-state.json` to confirm its section was written, then advance `step`.
+After a sub-agent returns: read `.active-orchestrator-state.json` to confirm its section was written, then advance `step`.
 
 Before each dispatch: check lazy-load (see Step 3 — Graceful Degradation).
 
@@ -251,7 +251,7 @@ In both cases, `kb-creator` writes `state.kb` (including `state.kb.discovery`, `
 Skill("kb-creator")
 ```
 
-After kb-creator completes: read `.jr-orchestrator-state.json`; confirm `state.kb.discovery` and `state.kb.files` are populated. If not populated (skip was recorded), note that downstream sub-skills will have incomplete input.
+After kb-creator completes: read `.active-orchestrator-state.json`; confirm `state.kb.discovery` and `state.kb.files` are populated. If not populated (skip was recorded), note that downstream sub-skills will have incomplete input.
 
 **Checkpoint (post-phase advance gate):** summarize the KB files produced, then run the advance gate (§ Inter-phase checkpoint protocol → B). Advance `step = "roadmap"` ONLY on "Continuar".
 
@@ -270,7 +270,7 @@ STOP and wait. Capture the answer as `{user-constraints}` (or "sin restricciones
 Agent({
   description: "Foundation: roadmap-generator",
   model: "sonnet",
-  prompt: `Use the Skill tool to invoke \`roadmap-generator\`. Read .jr-orchestrator-state.json + knowledge-base/ for input. Produce CHANGES.md and write state.roadmap. Return a summary + the CHANGES.md path.
+  prompt: `Use the Skill tool to invoke \`roadmap-generator\`. Read .active-orchestrator-state.json + knowledge-base/ for input. Produce CHANGES.md and write state.roadmap. Return a summary + the CHANGES.md path.
 
   ## User constraints (honor these when ordering/scoping the changes)
   {user-constraints}`
@@ -293,7 +293,7 @@ After the sub-agent returns: confirm `CHANGES.md` exists.
 Agent({
   description: "Foundation: find-skill (recommend-only)",
   model: "sonnet",
-  prompt: "Use the Skill tool to invoke `find-skill`. Derive { stack, domains, problem } from state.kb.discovery in .jr-orchestrator-state.json. RECOMMEND ONLY — DO NOT install anything, DO NOT run `npx skills add`. Return the full recommendations table (skill name, repo/source, install count, one-line why-it-matches). Write state.skills.recommended with the full list; leave state.skills.installed = []."
+  prompt: "Use the Skill tool to invoke `find-skill`. Derive { stack, domains, problem } from state.kb.discovery in .active-orchestrator-state.json. RECOMMEND ONLY — DO NOT install anything, DO NOT run `npx skills add`. Return the full recommendations table (skill name, repo/source, install count, one-line why-it-matches). Write state.skills.recommended with the full list; leave state.skills.installed = []."
 })
 ```
 
@@ -315,7 +315,7 @@ One option per recommended skill. STOP and wait. The user may pick all, some, or
 **Input consumed**: the installed skills on disk (`state.skills.installed` + the agent skills dirs).
 **Output**: `.atl/skill-registry.md` (+ engram upsert if available) + `state.registry`.
 
-> Note on "Project Conventions": in this first foundation pass `CLAUDE.md`/`AGENTS.md` don't exist yet (Phase 5 generates them), so the registry's conventions section starts empty. That's fine — the compact rules (the critical output) are complete, and the orchestrator reads `CLAUDE.md` directly anyway. A later `/jr-orchestrator:registry` re-run indexes the conventions too.
+> Note on "Project Conventions": in this first foundation pass `CLAUDE.md`/`AGENTS.md` don't exist yet (Phase 5 generates them), so the registry's conventions section starts empty. That's fine — the compact rules (the critical output) are complete, and the orchestrator reads `CLAUDE.md` directly anyway. A later `/active-orchestrator:registry` re-run indexes the conventions too.
 
 **Dispatch** (sub-agent — mechanical):
 ```
@@ -382,20 +382,20 @@ npx skills list | grep <skill-name>
      ```json
      { "step": "<next-phase>", "<section>": { "skipped": true, "reason": "sub-skill not installed" } }
      ```
-   - Log to the user: "Fase `<phase>` salteada. Podés instalar `<name>` luego y correr `/jr-orchestrator:<phase>` para ejecutarla de forma aislada."
+   - Log to the user: "Fase `<phase>` salteada. Podés instalar `<name>` luego y correr `/active-orchestrator:<phase>` para ejecutarla de forma aislada."
    - Continue to the next phase. **Do NOT abort the full flow.**
 
 **Known repos for install offers**:
 
 | Sub-skill | Repo | Visibility |
 |---|---|---|
-| `kb-creator` | `JuanCruzRobledo/kb-creator` | public |
-| `roadmap-generator` | `JuanCruzRobledo/roadmap-generator` | public |
+| `kb-creator` | `Group-Active-IA/kb-creator` | public |
+| `roadmap-generator` | `Group-Active-IA/roadmap-generator` | public |
 | `find-skill` | `vercel-labs/skills` (third-party) | public |
 | `agent-instruction` | `JuanCruzRobledo/agent-instruction` | public |
 | `skill-registry` | `JuanCruzRobledo/skill-registry` | public |
 
-> Note: this skill lives at `JuanCruzRobledo/jr-orchestrator` (public). The legacy private repo `JuanCruzRobledo/jr-starter` is a different project and is not used by the stack.
+> Note: this skill lives at `Group-Active-IA/active-orchestrator` (public).
 
 ---
 
@@ -403,7 +403,7 @@ npx skills list | grep <skill-name>
 
 When `step == "done"` (all phases complete or skipped):
 
-1. Update `.jr-orchestrator-state.json`: `step: "done"`.
+1. Update `.active-orchestrator-state.json`: `step: "done"`.
 2. Show the user:
    - Tree of generated project structure:
      ```bash
@@ -413,7 +413,7 @@ When `step == "done"` (all phases complete or skipped):
    - List of files created, one-liner per file.
    - Any phases that were skipped and why.
    - Suggested next command: `/opsx:propose <primer-change-de-CHANGES.md>` (if CHANGES.md was generated) or the next logical action.
-3. Reminder: "Podés re-ejecutar fases individuales: `/jr-orchestrator:kb` para agregar dominios, `/jr-orchestrator:rules` para regenerar CLAUDE.md, `/jr-orchestrator:find-skill` para agregar skills, `/jr-orchestrator:registry` para reconstruir el skill-registry después de instalar/quitar skills."
+3. Reminder: "Podés re-ejecutar fases individuales: `/active-orchestrator:kb` para agregar dominios, `/active-orchestrator:rules` para regenerar CLAUDE.md, `/active-orchestrator:find-skill` para agregar skills, `/active-orchestrator:registry` para reconstruir el skill-registry después de instalar/quitar skills."
 
 ---
 
@@ -436,10 +436,10 @@ This table is the **frozen contract**. C-13b (`kb-creator`) and C-13c (`roadmap-
 ## Errors and edge cases
 
 - **`openspec` CLI not installed**: offer install link, mark step pending, stop gracefully.
-- **`.jr-orchestrator-state.json` exists, `step != "done"`**: resume prompt (see Shared State Contract above).
+- **`.active-orchestrator-state.json` exists, `step != "done"`**: resume prompt (see Shared State Contract above).
 - **Target directory has existing files**: list them; ask "¿Continúo, mergeo, o cancelo?" before writing anything.
-- **User quits mid-flow**: confirm state was saved; "Ejecutá `/jr-orchestrator:init` para retomar."
-- **All sub-skills missing**: inform the user that the full flow requires sub-skills from the Full install mode of `jr-stack`. Offer the install command: `jr-stack install --mode full`.
+- **User quits mid-flow**: confirm state was saved; "Ejecutá `/active-orchestrator:init` para retomar."
+- **All sub-skills missing**: inform the user that the full flow requires sub-skills from the Full install mode of `active-stack`. Offer the install command: `active-stack install --mode full`.
 
 ---
 
@@ -449,7 +449,7 @@ This table is the **frozen contract**. C-13b (`kb-creator`) and C-13c (`roadmap-
 - Does NOT write `knowledge-base/*.md` files. That is `kb-creator`.
 - Does NOT generate `CHANGES.md`. That is `roadmap-generator`.
 - Does NOT generate `CLAUDE.md` or `AGENTS.md`. That is `agent-instruction`.
-- Does NOT implement devops scaffolding inline. Decided: devops scaffolding lives in a dedicated `devops-scaffolder` sub-skill (optional, full mode), dispatched like any other phase — never inlined. The sub-skill itself is built in a separate change (own repo `JuanCruzRobledo/devops-scaffolder`); until then `/jr-orchestrator:devops` degrades gracefully (sub-skill not installed).
+- Does NOT implement devops scaffolding inline. Decided: devops scaffolding lives in a dedicated `devops-scaffolder` sub-skill (optional, full mode), dispatched like any other phase — never inlined. The sub-skill itself is built in a separate change (own repo `Group-Active-IA/devops-scaffolder`); until then `/active-orchestrator:devops` degrades gracefully (sub-skill not installed).
 - Does NOT port templates (`templates/kb/*`, `templates/reglas/*`, docker-compose) — those feed the sub-skills in C-13b/c, not the orchestrator.
 - Does NOT commit or push (unless explicitly asked).
 - Does NOT install project dependencies (`npm install`, `pip install`, etc.).
