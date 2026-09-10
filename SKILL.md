@@ -2,17 +2,18 @@
 name: active-orchestrator
 description: >
   Thin orchestrator for the project foundation flow. Runs `openspec init`, then
-  dispatches each foundation phase to its dedicated sub-skill in §4.2 order:
-  kb-creator → roadmap-generator → find-skill → skill-registry → agent-instruction.
+  asks whether to run Discovery before dispatching each foundation phase to its
+  dedicated sub-skill in §4.2 order: [discovery-research] → kb-creator →
+  roadmap-generator → find-skill → skill-registry → agent-instruction.
   Owns the shared state file (.active-orchestrator-state.json) and the `step` field only.
   Trigger: /active-orchestrator:init, /active-orchestrator:kb, /active-orchestrator:rules,
-  /active-orchestrator:openspec, /active-orchestrator:devops, /active-orchestrator:find-skill —
-  or when the user wants to start a new project from scratch using the
-  SDD/OpenSpec foundation flow.
+  /active-orchestrator:discovery, /active-orchestrator:openspec, /active-orchestrator:devops,
+  /active-orchestrator:find-skill — or when the user wants to start a new project from
+  scratch using the SDD/OpenSpec foundation flow.
 license: MIT
 metadata:
   author: juancruzrobledo
-  version: "2.1"
+  version: "2.2"
 ---
 
 # active-orchestrator — thin orchestrator
@@ -26,8 +27,8 @@ You are a **thin orchestrator**. Your ONLY jobs are:
 5. **Hold a checkpoint at every phase boundary** — never run phases back-to-back without stopping (§ Inter-phase checkpoint protocol).
 6. Apply graceful degradation when a sub-skill is missing (Step 3).
 
-**You do NOT ask discovery questions.** Discovery is `kb-creator`'s domain.
-**You do NOT write knowledge-base files, CHANGES.md, or CLAUDE.md/AGENTS.md.** Those are sub-skill outputs.
+**You do NOT ask strategic discovery content questions** (system_type, scale, stack, problem, or the 11-point Discovery checklist). Those belong to `kb-creator` and `discovery-research` respectively. You DO ask the **phase-selection** question of whether to run Discovery at all (§ Step 1) — that's routing, not content, same category as the existing install gate in Phase 3.
+**You do NOT write knowledge-base files, CHANGES.md, discovery.md, or CLAUDE.md/AGENTS.md.** Those are sub-skill outputs.
 **You do NOT reimplement any foundation phase's logic yourself.** You route to its sub-skill — `Skill` for interactive phases (kb-creator, agent-instruction), `Agent` for mechanical ones. If you catch yourself writing the phase's logic, stop — route.
 
 ---
@@ -35,7 +36,7 @@ You are a **thin orchestrator**. Your ONLY jobs are:
 ## Operating rules (non-negotiable)
 
 1. **NEVER reimplement a phase's logic yourself** (discovery, KB, roadmap, rules). Always route to its sub-skill — `Skill` for interactive phases, `Agent` for mechanical ones.
-2. **NEVER ask the user strategic questions** (system_type, scale, stack, problem). Those questions belong to `kb-creator`.
+2. **NEVER ask the user strategic content questions** (system_type, scale, stack, problem, or the 11-point Discovery checklist). Those belong to `kb-creator` and `discovery-research`. You DO ask the phase-selection question of whether to run Discovery at all (§ Step 1) — that's routing, not content.
 3. **Own `step` and nothing else.** Only write `version`, `step`, `owner` to the state. Sub-skills write their own sections.
 4. **Check sub-skill presence before dispatch.** If missing → offer install → degrade if declined.
 5. **Resume by default.** If `.active-orchestrator-state.json` exists with `step != "done"`, ask to resume or restart.
@@ -47,15 +48,26 @@ You are a **thin orchestrator**. Your ONLY jobs are:
 
 ## Shared State Contract
 
-`.active-orchestrator-state.json` lives at the project root. Schema **version 3**. The `kb`/`roadmap`/`skills`/`agents` sections are the frozen contract C-13b/c consume; `registry` was added additively (no C-13b/c sub-skill reads it) and bumped the contract from 2 → 3.
+`.active-orchestrator-state.json` lives at the project root. Schema **version 4**. The `kb`/`roadmap`/`skills`/`agents` sections are the frozen contract C-13b/c consume; `registry` was added additively (no C-13b/c sub-skill reads it) and bumped the contract from 2 → 3; the top-level `discovery` section was added additively and bumped the contract from 3 → 4. Resuming an older state file (`version: 2` or `3`) is safe — those projects simply have no `discovery` section, treat that as "Discovery was never offered" rather than an error.
 
-> Note: the `"version": 3` below is the **state-schema contract version** (bump only when the shared state shape changes). It is NOT the skill release version in the frontmatter (`version: "2.0"`) — the two version independently.
+> Note: the `"version": 4` below is the **state-schema contract version** (bump only when the shared state shape changes). It is NOT the skill release version in the frontmatter (`version: "2.2"`) — the two version independently.
+
+> **Two different "discovery" concepts — do not confuse them.** The top-level `discovery` section (below) is **product/market discovery** — problem, users, competitors, business rules — owned by `discovery-research`, and it is OPTIONAL (only exists if the user chose to run it, § Step 1). `kb.discovery` is a *different*, pre-existing, **architecture-oriented** self-report (system_type, scale, stack, needs_infra) owned by `kb-creator`, and it always exists once `kb-creator` runs. `kb-creator` reads the top-level `discovery` section (when present) to pre-fill some of its own `kb.discovery` fields instead of re-asking — see `discovery-research`'s own `references/state-contract.md` for the exact field mapping.
 
 ```json
 {
-  "version": 3,
-  "step": "openspec|kb|roadmap|find-skill|registry|agents|done",
+  "version": 4,
+  "step": "openspec|discovery|kb|roadmap|find-skill|registry|agents|done",
   "owner": "active-orchestrator",
+  "discovery": {
+    "created_by": "discovery-research",
+    "sources": ["https://competidor-a.com"],
+    "competitors": [{ "name": "...", "notes_file": "discovery/sources/a.md" }],
+    "problema": "...", "usuarios": ["..."], "casos_de_uso": ["..."],
+    "funcionalidades_necesarias": ["..."], "funcionalidades_opcionales": ["..."],
+    "reglas_de_negocio": ["..."], "integraciones": ["..."], "restricciones": ["..."],
+    "riesgos": ["..."], "preguntas_abiertas": ["..."]
+  },
   "kb": {
     "created_by": "kb-creator",
     "source": "interactive|ingest",
@@ -90,18 +102,19 @@ You are a **thin orchestrator**. Your ONLY jobs are:
 }
 ```
 
+If the user declined Discovery at the Step 1 gate, write `"discovery": { "skipped": true }` instead of omitting the key entirely — that records it was a decision, not an oversight, and stops a resumed session from re-asking.
+
 ### Ownership rules
 
 | Section | Owner | Writes |
 |---|---|---|
 | `version`, `step`, `owner` | `active-orchestrator` (this skill) | Updated after each phase completes |
-| `kb` (including `kb.discovery`) | `kb-creator` | After discovery + KB generation |
+| `discovery` (top-level, product/market) | `discovery-research` | After the Discovery checklist is confirmed by the user — only if Discovery was chosen at Step 1 |
+| `kb` (including `kb.discovery`, architecture-oriented) | `kb-creator` | After discovery + KB generation |
 | `roadmap` | `roadmap-generator` | After CHANGES.md is produced |
 | `skills` | `find-skill` | After recommendations + install |
 | `agents` | `agent-instruction` | After CLAUDE.md/AGENTS.md generated |
 | `registry` | `skill-registry` | After `.atl/skill-registry.md` is built (runs after `find-skill`, before `agent-instruction` — which consumes it) |
-
-**There is NO orchestrator-owned `discovery` section.** The discovery lives inside `state.kb.discovery`, owned by `kb-creator`.
 
 ### Resume logic
 
@@ -122,6 +135,7 @@ Branch on which command fired:
 | Command | Jump to |
 |---|---|
 | `/active-orchestrator:init` | Step 1 — full flow |
+| `/active-orchestrator:discovery` | Dispatch `discovery-research` directly (standalone — no phase-selection gate, the user already chose to run it) |
 | `/active-orchestrator:kb` | Dispatch `kb-creator` directly (Step 2 — kb phase only) |
 | `/active-orchestrator:rules` | Dispatch `agent-instruction` (rules/CLAUDE.md re-gen only) |
 | `/active-orchestrator:openspec` | Step 1 — `openspec init` only |
@@ -161,10 +175,20 @@ Before branching: always load and apply resume logic above.
 
 5. Write initial state file:
    ```json
-   { "version": 3, "step": "kb", "owner": "active-orchestrator" }
+   { "version": 4, "step": "kb", "owner": "active-orchestrator" }
    ```
+   (`step` starts at `"kb"` — it only moves to `"discovery"` in the next sub-step if the user opts in.)
 
-6. **Checkpoint (post-phase advance gate):** confirm `openspec/` was scaffolded, then run the advance gate (§ Inter-phase checkpoint protocol → B). On "Continuar", advance to Step 2 (kb-creator). On "Parar", state is already persisted at `step = "kb"`.
+6. **Discovery gate (phase-selection, not content).** Ask, via `AskUserQuestion`:
+   > "¿Querés hacer una etapa de Discovery antes de armar la Knowledge Base? Sirve para investigar competidores, usuarios, reglas de negocio y riesgos antes de documentar — con o sin URLs de competidores a mano."
+   — options: **"Sí, hacer Discovery"** / **"No, ir directo a Knowledge Base"**.
+
+   STOP and wait (same as every other `AskUserQuestion` in this skill). This is a phase-selection question (§ operating rules note above), not a discovery-content question — you're not asking *what* the problem or the competitors are, only *whether* to run the phase that asks that.
+
+   - On **"Sí"**: set `step = "discovery"` in state. Advance to Step 2, Phase 0 (`discovery-research`).
+   - On **"No"**: write `"discovery": { "skipped": true }` into state (records the decision explicitly, so a resumed session doesn't re-ask) and keep `step = "kb"`. Advance to Step 2, Phase 1 (`kb-creator`) directly — this reproduces the pre-Discovery flow exactly, no regression.
+
+7. **Checkpoint (post-phase advance gate):** confirm `openspec/` was scaffolded, then run the advance gate (§ Inter-phase checkpoint protocol → B) — its "next phase" is whichever the Discovery gate above selected. On "Continuar", advance. On "Parar", state is already persisted at the current `step`.
 
 ---
 
@@ -174,6 +198,7 @@ Dispatch the foundation phases in this exact order. **The execution model is hyb
 
 | Phase | Runs | Why |
 |---|---|---|
+| discovery-research | **inline** (`Skill`) | Interactive — OPTIONAL, only dispatched if the Step 1 Discovery gate was "Sí"; its checklist Q&A must reach the user |
 | kb-creator | **inline** (`Skill`) | Interactive — its discovery Q&A must reach the user; a sub-agent runs autonomously and cannot ask |
 | roadmap-generator | **sub-agent** (`Agent`) | Mechanical — reads the KB, writes `CHANGES.md`, no user interaction |
 | find-skill | **sub-agent** (`Agent`) | Mechanical — **recommends only**; the orchestrator runs the install gate and installs only what the user picks (never the sub-agent) |
@@ -206,9 +231,9 @@ The full flow NEVER runs phases back-to-back. Between **every** phase boundary y
    - **"Parar acá"** → persist state at the current `step`, tell the user how to resume (`/active-orchestrator:init`), and exit gracefully.
 3. STOP and wait. Advance `step` ONLY on "Continuar".
 
-This post-phase gate runs after **every** phase: `openspec init` → kb-creator → roadmap-generator → find-skill (install) → skill-registry → agent-instruction.
+This post-phase gate runs after **every** phase: `openspec init` (which includes the Discovery gate) → [discovery-research, if chosen] → kb-creator → roadmap-generator → find-skill (install) → skill-registry → agent-instruction.
 
-> Standalone single-phase commands (`/active-orchestrator:kb`, `:rules`, `:find-skill`, `:registry`, `:openspec`) run ONLY their phase and stop — they don't chain, so they don't need the advance gate (the user already chose one phase). The checkpoint protocol governs the **full flow** (`/active-orchestrator:init`).
+> Standalone single-phase commands (`/active-orchestrator:kb`, `:rules`, `:discovery`, `:find-skill`, `:registry`, `:openspec`) run ONLY their phase and stop — they don't chain, so they don't need the advance gate (the user already chose one phase). The checkpoint protocol governs the **full flow** (`/active-orchestrator:init`).
 
 ---
 
@@ -236,9 +261,27 @@ After a sub-agent returns: read `.active-orchestrator-state.json` to confirm its
 
 Before each dispatch: check lazy-load (see Step 3 — Graceful Degradation).
 
-### Phase 1: kb-creator (FIRST — produces all discovery + KB)
+### Phase 0: discovery-research (OPTIONAL — before kb-creator)
 
-**Why first**: `kb-creator` is the only sub-skill that runs discovery. Every downstream sub-skill consumes its output (`state.kb.discovery` + `knowledge-base/`). Nothing else can run before `kb-creator` completes.
+**Only runs if the Step 1 Discovery gate was "Sí".** If the user chose "No", skip straight to Phase 1 — do not dispatch this phase, do not mention it again unless the user later runs `/active-orchestrator:discovery` standalone.
+
+**Why here, before `kb-creator`**: this is product/market discovery (problem, users, competitors, business rules, risks) — it produces context `kb-creator` can use to avoid re-asking the same things in its own architecture-oriented discovery. It never runs after `kb-creator`; there would be nothing left for it to inform.
+
+**Input consumed**: none required — it can run from a blank slate (pure Q&A) or use URLs the user provides (invokes `web-scraper` itself, internally — you don't dispatch `web-scraper`, `discovery-research` does).
+**Output**: `discovery/discovery.md` + the top-level `state.discovery` section.
+
+**Dispatch** (inline — interactive, must reach the user):
+```
+Skill("discovery-research")
+```
+
+After it completes: read `.active-orchestrator-state.json`; confirm `state.discovery` was written (not just `{skipped: true}`, which would mean something went wrong since the gate already said "Sí").
+
+**Checkpoint (post-phase advance gate):** summarize the Discovery findings produced (problem, key competitors if any, top risks), then run the advance gate (§ Inter-phase checkpoint protocol → B). Advance `step = "kb"` ONLY on "Continuar".
+
+### Phase 1: kb-creator (produces the KB; first MANDATORY phase)
+
+**Why here**: `kb-creator` is the only sub-skill that runs *architecture-oriented* discovery (`kb.discovery`) and builds `knowledge-base/`. It is the first phase that always runs — Phase 0 is optional and, when it ran, only feeds it extra context (`state.discovery`, if present) to avoid re-asking what Discovery already answered. Every downstream sub-skill consumes `kb-creator`'s output (`state.kb.discovery` + `knowledge-base/`). Nothing else can run before `kb-creator` completes.
 
 **kb-creator has two operational sources** (the sub-skill handles the choice — the orchestrator does NOT choose):
 - `interactive` — runs a Q&A discovery session (system_type, scale, stack, problem, domains) for a project being built from scratch.
@@ -389,6 +432,7 @@ npx skills list | grep <skill-name>
 
 | Sub-skill | Repo | Visibility |
 |---|---|---|
+| `discovery-research` | `Group-Active-IA/discovery-research` | private |
 | `kb-creator` | `Group-Active-IA/kb-creator` | public |
 | `roadmap-generator` | `Group-Active-IA/roadmap-generator` | public |
 | `find-skill` | `vercel-labs/skills` (third-party) | public |
@@ -423,13 +467,14 @@ This table is the **frozen contract**. C-13b (`kb-creator`) and C-13c (`roadmap-
 
 | Sub-skill | Input | Output |
 |---|---|---|
-| `kb-creator` | **Two sources (sub-skill decides)**: (a) **interactive** — Q&A discovery: system_type, scale, stack, problem, domains; (b) **ingest** — existing docs/specs/READMEs provided by the user | `knowledge-base/*.md` + `state.kb` (`discovery`, `source`, `files`) |
+| `discovery-research` | Optional URLs (invokes `web-scraper` itself) + user Q&A over the 11-point checklist. Added additively to this contract — not part of the original C-13b/c scope. | `discovery/discovery.md` + top-level `state.discovery` |
+| `kb-creator` | **Two sources (sub-skill decides)**: (a) **interactive** — Q&A discovery: system_type, scale, stack, problem, domains; (b) **ingest** — existing docs/specs/READMEs provided by the user. Reads top-level `state.discovery` (if present) to pre-fill some fields. | `knowledge-base/*.md` + `state.kb` (`discovery`, `source`, `files`) |
 | `roadmap-generator` | `state.kb.discovery` + `state.kb.files` (reads `knowledge-base/`) | `CHANGES.md` + `state.roadmap` |
 | `find-skill` | `{ stack, domains, problem }` derived from `state.kb.discovery` | recommendations table + `state.skills` |
 | `skill-registry` | installed skills on disk (`state.skills.installed` + agent skills dirs) | `.atl/skill-registry.md` (+ engram upsert) + `state.registry` |
 | `agent-instruction` | `state.kb.discovery` + `state.kb.files` (reads `knowledge-base/`) + `.atl/skill-registry.md` (skills source of truth) + applicable rule snippets | `CLAUDE.md` / `AGENTS.md` + `state.agents` |
 
-**Order constraint**: `kb-creator` runs FIRST (produces discovery + KB everyone consumes). `find-skill` installs the domain skills. `skill-registry` then scans them and distills compact rules into `.atl/skill-registry.md`. `agent-instruction` runs LAST — it consumes the registry as its single source of truth for available skills (no re-scan) and needs the KB index too.
+**Order constraint**: `discovery-research`, when chosen, runs BEFORE everything else — it's the only phase whose output (`state.discovery`) is optional and feeds `kb-creator`, never the other way around. `kb-creator` runs first among the MANDATORY phases (produces `kb.discovery` + KB everyone consumes). `find-skill` installs the domain skills. `skill-registry` then scans them and distills compact rules into `.atl/skill-registry.md`. `agent-instruction` runs LAST — it consumes the registry as its single source of truth for available skills (no re-scan) and needs the KB index too.
 
 ---
 
@@ -445,8 +490,10 @@ This table is the **frozen contract**. C-13b (`kb-creator`) and C-13c (`roadmap-
 
 ## What this skill does NOT do
 
-- Does NOT ask discovery questions (system_type, scale, stack, problem). That is `kb-creator`.
+- Does NOT ask strategic discovery content questions (system_type, scale, stack, problem, or the 11-point Discovery checklist). Those are `kb-creator`'s and `discovery-research`'s respectively — this skill only asks WHETHER to run Discovery (§ Step 1), never WHAT the answers are.
+- Does NOT run Discovery/competitor research itself. That is `discovery-research`, dispatched inline when the user opts in.
 - Does NOT write `knowledge-base/*.md` files. That is `kb-creator`.
+- Does NOT write `discovery/discovery.md`. That is `discovery-research`.
 - Does NOT generate `CHANGES.md`. That is `roadmap-generator`.
 - Does NOT generate `CLAUDE.md` or `AGENTS.md`. That is `agent-instruction`.
 - Does NOT implement devops scaffolding inline. Decided: devops scaffolding lives in a dedicated `devops-scaffolder` sub-skill (optional, full mode), dispatched like any other phase — never inlined. The sub-skill itself is built in a separate change (own repo `Group-Active-IA/devops-scaffolder`); until then `/active-orchestrator:devops` degrades gracefully (sub-skill not installed).
