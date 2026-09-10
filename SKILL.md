@@ -432,7 +432,7 @@ npx skills list | grep <skill-name>
 
 | Sub-skill | Repo | Visibility |
 |---|---|---|
-| `discovery-research` | `Group-Active-IA/discovery-research` | private |
+| `discovery-research` | `Group-Active-IA/discovery-research` | public |
 | `kb-creator` | `Group-Active-IA/kb-creator` | public |
 | `roadmap-generator` | `Group-Active-IA/roadmap-generator` | public |
 | `find-skill` | `vercel-labs/skills` (third-party) | public |
