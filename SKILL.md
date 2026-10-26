@@ -4,16 +4,16 @@ description: >
   Thin orchestrator for the project foundation flow. Runs `openspec init`, then
   asks whether to run Discovery before dispatching each foundation phase to its
   dedicated sub-skill in §4.2 order: [discovery-research] → kb-creator →
-  roadmap-generator → find-skill → skill-registry → agent-instruction.
+  design-system → roadmap-generator → find-skill → skill-registry → agent-instruction.
   Owns the shared state file (.active-orchestrator-state.json) and the `step` field only.
-  Trigger: /active-orchestrator:init, /active-orchestrator:kb, /active-orchestrator:rules,
+  Trigger: /active-orchestrator:init, /active-orchestrator:kb, /active-orchestrator:design, /active-orchestrator:rules,
   /active-orchestrator:discovery, /active-orchestrator:openspec, /active-orchestrator:devops,
   /active-orchestrator:find-skill — or when the user wants to start a new project from
   scratch using the SDD/OpenSpec foundation flow.
 license: MIT
 metadata:
   author: juancruzrobledo
-  version: "2.2"
+  version: "2.3"
 ---
 
 # active-orchestrator — thin orchestrator
@@ -29,7 +29,9 @@ You are a **thin orchestrator**. Your ONLY jobs are:
 
 **You do NOT ask strategic discovery content questions** (system_type, scale, stack, problem, or the 11-point Discovery checklist). Those belong to `kb-creator` and `discovery-research` respectively. You DO ask the **phase-selection** question of whether to run Discovery at all (§ Step 1) — that's routing, not content, same category as the existing install gate in Phase 3.
 **You do NOT write knowledge-base files, CHANGES.md, discovery.md, or CLAUDE.md/AGENTS.md.** Those are sub-skill outputs.
-**You do NOT reimplement any foundation phase's logic yourself.** You route to its sub-skill — `Skill` for interactive phases (kb-creator, agent-instruction), `Agent` for mechanical ones. If you catch yourself writing the phase's logic, stop — route.
+**You do NOT reimplement any foundation phase's logic yourself.** You route to its sub-skill — `Skill` for interactive phases (kb-creator, design-system, agent-instruction), `Agent` for mechanical ones. If you catch yourself writing the phase's logic, stop — route.
+
+`Skill(...)`, `Agent(...)`, and `AskUserQuestion` below denote capabilities, not required tool names. On Claude, Codex, OpenCode or Antigravity, use the host agent's available skill invocation, delegation, and user-question mechanisms. If delegation is unavailable, invoke the same sub-skill inline and keep the phase boundaries and approval gates.
 
 ---
 
@@ -48,16 +50,16 @@ You are a **thin orchestrator**. Your ONLY jobs are:
 
 ## Shared State Contract
 
-`.active-orchestrator-state.json` lives at the project root. Schema **version 4**. The `kb`/`roadmap`/`skills`/`agents` sections are the frozen contract C-13b/c consume; `registry` was added additively (no C-13b/c sub-skill reads it) and bumped the contract from 2 → 3; the top-level `discovery` section was added additively and bumped the contract from 3 → 4. Resuming an older state file (`version: 2` or `3`) is safe — those projects simply have no `discovery` section, treat that as "Discovery was never offered" rather than an error.
+`.active-orchestrator-state.json` lives at the project root. Schema **version 5**. The `kb`/`roadmap`/`skills`/`agents` sections remain the frozen C-13b/c contract. Version 3 added `registry`, version 4 added optional product `discovery`, and version 5 adds `visual_design`. Resume versions 2, 3, and 4 without erasing their sections. A missing `visual_design` means the visual policy has not been decided, not that the user opted out.
 
-> Note: the `"version": 4` below is the **state-schema contract version** (bump only when the shared state shape changes). It is NOT the skill release version in the frontmatter (`version: "2.2"`) — the two version independently.
+> Note: the `"version": 5` below is the state-schema version, separate from the skill release version (`2.3`).
 
 > **Two different "discovery" concepts — do not confuse them.** The top-level `discovery` section (below) is **product/market discovery** — problem, users, competitors, business rules — owned by `discovery-research`, and it is OPTIONAL (only exists if the user chose to run it, § Step 1). `kb.discovery` is a *different*, pre-existing, **architecture-oriented** self-report (system_type, scale, stack, needs_infra) owned by `kb-creator`, and it always exists once `kb-creator` runs. `kb-creator` reads the top-level `discovery` section (when present) to pre-fill some of its own `kb.discovery` fields instead of re-asking — see `discovery-research`'s own `references/state-contract.md` for the exact field mapping.
 
 ```json
 {
-  "version": 4,
-  "step": "openspec|discovery|kb|roadmap|find-skill|registry|agents|done",
+  "version": 5,
+  "step": "openspec|discovery|kb|visual-design|roadmap|find-skill|registry|agents|done",
   "owner": "active-orchestrator",
   "discovery": {
     "created_by": "discovery-research",
@@ -80,6 +82,13 @@ You are a **thin orchestrator**. Your ONLY jobs are:
       "problem": "..."
     },
     "files": ["knowledge-base/01-vision.md"]
+  },
+  "visual_design": {
+    "created_by": "design-system",
+    "mode": "system-and-mockups|system-only|off|deferred",
+    "status": "approved|pending|skipped|deferred",
+    "revision": 1,
+    "path": "design-system/README.md"
   },
   "roadmap": {
     "created_by": "roadmap-generator",
@@ -111,6 +120,7 @@ If the user declined Discovery at the Step 1 gate, write `"discovery": { "skippe
 | `version`, `step`, `owner` | `active-orchestrator` (this skill) | Updated after each phase completes |
 | `discovery` (top-level, product/market) | `discovery-research` | After the Discovery checklist is confirmed by the user — only if Discovery was chosen at Step 1 |
 | `kb` (including `kb.discovery`, architecture-oriented) | `kb-creator` | After discovery + KB generation |
+| `visual_design` | `design-system` | After the user's project-level choice; approved only after an explicit review of the visual system |
 | `roadmap` | `roadmap-generator` | After CHANGES.md is produced |
 | `skills` | `find-skill` | After recommendations + install |
 | `agents` | `agent-instruction` | After CLAUDE.md/AGENTS.md generated |
@@ -125,6 +135,9 @@ At the start of every command invocation:
    - Via `AskUserQuestion` (single-select): "Hay una fundación en progreso (paso: `{step}`). ¿Continuamos desde ahí o empezamos de cero?" — options: "Continuar desde `{step}`" / "Empezar de cero".
    - On "continuar": jump to the step recorded in state, using persisted sections as context.
    - On "de cero": delete `.active-orchestrator-state.json`, start from Step 0.
+3. If `step == "done"`, preserve it. A missing `visual_design` in an older completed foundation is handled by `/active-orchestrator:design` or by the first visual change; never replay KB, roadmap, or completed phases just to add this section.
+4. For an in-progress older foundation with no `visual_design`: after KB, route through `visual-design` before roadmap. If the recorded step is already roadmap or later, do not rewind completed phases; offer the standalone visual phase before the next visual change.
+5. When adding `visual_design` to a version 2/3/4 file, update only the top-level `version` to `5` yourself after the sub-skill finishes; preserve all existing and unknown sections. Back up the JSON first, write atomically, and reread it. Do not change a completed `step: done`.
 
 ---
 
@@ -137,6 +150,7 @@ Branch on which command fired:
 | `/active-orchestrator:init` | Step 1 — full flow |
 | `/active-orchestrator:discovery` | Dispatch `discovery-research` directly (standalone — no phase-selection gate, the user already chose to run it) |
 | `/active-orchestrator:kb` | Dispatch `kb-creator` directly (Step 2 — kb phase only) |
+| `/active-orchestrator:design` | Dispatch `design-system` directly to set or revise the project visual policy; keep `step: done` if the foundation was complete |
 | `/active-orchestrator:rules` | Dispatch `agent-instruction` (rules/CLAUDE.md re-gen only) |
 | `/active-orchestrator:openspec` | Step 1 — `openspec init` only |
 | `/active-orchestrator:devops` | Dispatch `devops-scaffolder` sub-skill (optional, full mode). Sub-skill not yet built — see Foundation flow notes. |
@@ -200,6 +214,7 @@ Dispatch the foundation phases in this exact order. **The execution model is hyb
 |---|---|---|
 | discovery-research | **inline** (`Skill`) | Interactive — OPTIONAL, only dispatched if the Step 1 Discovery gate was "Sí"; its checklist Q&A must reach the user |
 | kb-creator | **inline** (`Skill`) | Interactive — its discovery Q&A must reach the user; a sub-agent runs autonomously and cannot ask |
+| design-system | **inline** (`Skill`) | Interactive — user selects the project policy and explicitly approves the visual system if requested |
 | roadmap-generator | **sub-agent** (`Agent`) | Mechanical — reads the KB, writes `CHANGES.md`, no user interaction |
 | find-skill | **sub-agent** (`Agent`) | Mechanical — **recommends only**; the orchestrator runs the install gate and installs only what the user picks (never the sub-agent) |
 | skill-registry | **sub-agent** (`Agent`) | Mechanical — heavy scan of every `SKILL.md` |
@@ -231,7 +246,7 @@ The full flow NEVER runs phases back-to-back. Between **every** phase boundary y
    - **"Parar acá"** → persist state at the current `step`, tell the user how to resume (`/active-orchestrator:init`), and exit gracefully.
 3. STOP and wait. Advance `step` ONLY on "Continuar".
 
-This post-phase gate runs after **every** phase: `openspec init` (which includes the Discovery gate) → [discovery-research, if chosen] → kb-creator → roadmap-generator → find-skill (install) → skill-registry → agent-instruction.
+This post-phase gate runs after **every** phase: `openspec init` (which includes the Discovery gate) → [discovery-research, if chosen] → kb-creator → design-system → roadmap-generator → find-skill (install) → skill-registry → agent-instruction.
 
 > Standalone single-phase commands (`/active-orchestrator:kb`, `:rules`, `:discovery`, `:find-skill`, `:registry`, `:openspec`) run ONLY their phase and stop — they don't chain, so they don't need the advance gate (the user already chose one phase). The checkpoint protocol governs the **full flow** (`/active-orchestrator:init`).
 
@@ -296,7 +311,15 @@ Skill("kb-creator")
 
 After kb-creator completes: read `.active-orchestrator-state.json`; confirm `state.kb.discovery` and `state.kb.files` are populated. If not populated (skip was recorded), note that downstream sub-skills will have incomplete input.
 
-**Checkpoint (post-phase advance gate):** summarize the KB files produced, then run the advance gate (§ Inter-phase checkpoint protocol → B). Advance `step = "roadmap"` ONLY on "Continuar".
+**Checkpoint (post-phase advance gate):** summarize the KB files produced, then run the advance gate (§ Inter-phase checkpoint protocol → B). Advance `step = "visual-design"` ONLY on "Continuar".
+
+### Phase 1b: design-system (project visual policy)
+
+**Dispatch** (inline — interactive): `Skill("design-system")`. The skill installed by Active Stack owns the decision, artifacts, and `state.visual_design`; the orchestrator only routes to it. Present the four choices `system-and-mockups`, `system-only`, `off`, and `deferred` through the skill. `deferred` applies when the project has no planned visual interface; the first visual change revisits the decision once. `off` is an explicit project opt-out and must never trigger mockup requests on each change. `system-only` keeps the approved visual system but does not require per-change mockups.
+
+For `system-and-mockups` and `system-only`, the skill creates `design-system/` and waits for explicit user approval before setting `status: approved`. An unfinished design leaves `status: pending`; do not advance as though it were approved. For `off` or `deferred`, the skill records the policy with a minimal README and matching state status; no branding work is required. Check that `state.visual_design` was written, with `created_by: design-system`, before the checkpoint. Preserve the user's choice across resumption.
+
+**Checkpoint (post-phase advance gate):** summarize the chosen mode and, if applicable, the approved `design-system/` path. Advance `step = "roadmap"` ONLY on "Continuar". In a standalone `/active-orchestrator:design` invocation, stop after this phase and preserve the prior `step` value.
 
 ### Phase 2: roadmap-generator
 
@@ -393,7 +416,7 @@ After completion: this is the LAST phase, so there's no "next phase" to gate int
 
 ## Step 3 — Lazy-load dispatch + graceful degradation
 
-Before invoking each sub-skill via the `Skill` tool, check that it is installed:
+Before invoking each sub-skill, inspect the agent's configured skills directory. If the host supports `npx skills`, it may also list globally installed skills:
 
 ```bash
 npx skills list -g | grep <skill-name>
@@ -414,11 +437,12 @@ npx skills list | grep <skill-name>
 2. Offer install via `AskUserQuestion` (single-select):
    > "¿La instalamos ahora?" — options: "Sí, instalar" / "No, saltear esta fase".
 
-3. On "Sí, instalar": run:
+3. On "Sí, instalar": for skills with a repo, run:
    ```bash
    npx skills add <repo> --skill <name> -g
    ```
    Where `<repo>` is the skill's source repo (see catalog). Then dispatch normally.
+   `design-system` is embedded in Active Stack and has no standalone source repo: run `active-stack install --mode full --agent <agent>` or select `design-system` in Custom. Do not pass its embedded asset path to `npx skills add`.
 
 4. On "No, saltear":
    - Mark the skip in state:
@@ -434,6 +458,7 @@ npx skills list | grep <skill-name>
 |---|---|---|
 | `discovery-research` | `Group-Active-IA/discovery-research` | public |
 | `kb-creator` | `Group-Active-IA/kb-creator` | public |
+| `design-system` | Bundled in Active Stack Full, selectable in Custom (`assets/skills/design-system`) | embedded |
 | `roadmap-generator` | `Group-Active-IA/roadmap-generator` | public |
 | `find-skill` | `vercel-labs/skills` (third-party) | public |
 | `agent-instruction` | `JuanCruzRobledo/agent-instruction` | public |
@@ -469,12 +494,13 @@ This table is the **frozen contract**. C-13b (`kb-creator`) and C-13c (`roadmap-
 |---|---|---|
 | `discovery-research` | Optional URLs (invokes `web-scraper` itself) + user Q&A over the 11-point checklist. Added additively to this contract — not part of the original C-13b/c scope. | `discovery/discovery.md` + top-level `state.discovery` |
 | `kb-creator` | **Two sources (sub-skill decides)**: (a) **interactive** — Q&A discovery: system_type, scale, stack, problem, domains; (b) **ingest** — existing docs/specs/READMEs provided by the user. Reads top-level `state.discovery` (if present) to pre-fill some fields. | `knowledge-base/*.md` + `state.kb` (`discovery`, `source`, `files`) |
+| `design-system` | `state.kb` + user-selected visual policy; existing UI/brand assets if present | `state.visual_design` + `design-system/` policy and, when approved, visual system artifacts |
 | `roadmap-generator` | `state.kb.discovery` + `state.kb.files` (reads `knowledge-base/`) | `CHANGES.md` + `state.roadmap` |
 | `find-skill` | `{ stack, domains, problem }` derived from `state.kb.discovery` | recommendations table + `state.skills` |
 | `skill-registry` | installed skills on disk (`state.skills.installed` + agent skills dirs) | `.atl/skill-registry.md` (+ engram upsert) + `state.registry` |
 | `agent-instruction` | `state.kb.discovery` + `state.kb.files` (reads `knowledge-base/`) + `.atl/skill-registry.md` (skills source of truth) + applicable rule snippets | `CLAUDE.md` / `AGENTS.md` + `state.agents` |
 
-**Order constraint**: `discovery-research`, when chosen, runs BEFORE everything else — it's the only phase whose output (`state.discovery`) is optional and feeds `kb-creator`, never the other way around. `kb-creator` runs first among the MANDATORY phases (produces `kb.discovery` + KB everyone consumes). `find-skill` installs the domain skills. `skill-registry` then scans them and distills compact rules into `.atl/skill-registry.md`. `agent-instruction` runs LAST — it consumes the registry as its single source of truth for available skills (no re-scan) and needs the KB index too.
+**Order constraint**: `discovery-research`, when chosen, precedes `kb-creator`. The visual policy follows KB and precedes roadmap. `find-skill` installs domain skills; `skill-registry` scans them; `agent-instruction` consumes the registry last.
 
 ---
 
