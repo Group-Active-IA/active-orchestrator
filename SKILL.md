@@ -39,7 +39,7 @@ You are a **thin orchestrator**. Your ONLY jobs are:
 
 1. **NEVER reimplement a phase's logic yourself** (discovery, KB, roadmap, rules). Always route to its sub-skill — `Skill` for interactive phases, `Agent` for mechanical ones.
 2. **NEVER ask the user strategic content questions** (system_type, scale, stack, problem, or the 11-point Discovery checklist). Those belong to `kb-creator` and `discovery-research`. You DO ask the phase-selection question of whether to run Discovery at all (§ Step 1) — that's routing, not content.
-3. **Own `step` and nothing else.** Only write `version`, `step`, `owner` to the state. Sub-skills write their own sections.
+3. **Own `step` and the normal schema version.** Only write `version`, `step`, `owner` to the state. Sub-skills write their own sections. `design-system` may also raise a legacy schema version to 5 when invoked standalone on an older project.
 4. **Check sub-skill presence before dispatch.** If missing → offer install → degrade if declined.
 5. **Resume by default.** If `.active-orchestrator-state.json` exists with `step != "done"`, ask to resume or restart.
 6. **STOP and wait after each AskUserQuestion call.** Never assume the answer.
@@ -137,7 +137,7 @@ At the start of every command invocation:
    - On "de cero": delete `.active-orchestrator-state.json`, start from Step 0.
 3. If `step == "done"`, preserve it. A missing `visual_design` in an older completed foundation is handled by `/active-orchestrator:design` or by the first visual change; never replay KB, roadmap, or completed phases just to add this section.
 4. For an in-progress older foundation with no `visual_design`: after KB, route through `visual-design` before roadmap. If the recorded step is already roadmap or later, do not rewind completed phases; offer the standalone visual phase before the next visual change.
-5. When adding `visual_design` to a version 2/3/4 file, update only the top-level `version` to `5` yourself after the sub-skill finishes; preserve all existing and unknown sections. Back up the JSON first, write atomically, and reread it. Do not change a completed `step: done`.
+5. When adding `visual_design` to a version 2/3/4 file, ensure the top-level `version` is `5` after the sub-skill finishes. The sub-skill may already have upgraded it when called standalone. Preserve all existing and unknown sections; back up the JSON before any remaining change, write atomically, and reread it. Do not change a completed `step: done`.
 
 ---
 
@@ -316,6 +316,8 @@ After kb-creator completes: read `.active-orchestrator-state.json`; confirm `sta
 ### Phase 1b: design-system (project visual policy)
 
 **Dispatch** (inline — interactive): `Skill("design-system")`. The skill installed by Active Stack owns the decision, artifacts, and `state.visual_design`; the orchestrator only routes to it. Present the four choices `system-and-mockups`, `system-only`, `off`, and `deferred` through the skill. `deferred` applies when the project has no planned visual interface; the first visual change revisits the decision once. `off` is an explicit project opt-out and must never trigger mockup requests on each change. `system-only` keeps the approved visual system but does not require per-change mockups.
+
+If `deferred` is already recorded and the first visual change has arrived, dispatch the skill to resolve it into a durable choice. Do not treat the recorded `deferred` value as an instruction to keep deferring.
 
 For `system-and-mockups` and `system-only`, the skill creates `design-system/` and waits for explicit user approval before setting `status: approved`. An unfinished design leaves `status: pending`; do not advance as though it were approved. For `off` or `deferred`, the skill records the policy with a minimal README and matching state status; no branding work is required. Check that `state.visual_design` was written, with `created_by: design-system`, before the checkpoint. Preserve the user's choice across resumption.
 
