@@ -61,6 +61,22 @@ class FoundationContract(unittest.TestCase):
         self.assertIn("Preserve the existing project ID", setup)
         self.assertIn("`workspace_id` is optional", setup)
 
+    def test_clickup_list_is_read_and_confirmed_before_configuration_write(self):
+        setup = section("Dispatch and entrypoints").split("### Task management", 1)[1]
+        self.assertRegex(setup, r"invoke `active-roadmap` in `configure` mode")
+        validation = setup.index("read-only list validation")
+        preview = setup.index("preview the validated destination")
+        approval = setup.index("approval before writing the configuration")
+        self.assertLess(validation, preview)
+        self.assertLess(preview, approval)
+
+    def test_failed_destination_validation_preserves_existing_configuration(self):
+        setup = section("Dispatch and entrypoints").split("### Task management", 1)[1]
+        self.assertIn("If validation fails", setup)
+        self.assertIn("defer or explicitly choose local", setup)
+        self.assertIn("preserve any existing configuration", setup)
+        self.assertIn("Save it without credentials or remote writes", setup)
+
     def test_resume_preserves_sections_on_failure_or_migration(self):
         resume = section("State and resume")
         for requirement in ("versions 2–5", "unknown sections", "failed", "reused"):

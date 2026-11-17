@@ -7,7 +7,7 @@ description: >
 license: MIT
 metadata:
   author: juancruzrobledo
-  version: "2.5"
+  version: "2.6"
 ---
 
 # Active Orchestrator
@@ -101,7 +101,13 @@ in the active client. If the skill is unavailable, explain that ClickUp setup
 can be deferred, or use the local option. Preserve existing ClickUp
 configuration when that capability is unavailable.
 
-For ClickUp, preview the exact destination list and known assignee mappings.
+When the user chooses ClickUp, invoke `active-roadmap` in `configure` mode.
+Pass the project root and saved destination, if any. Ask for the target list
+and optional workspace when they are unknown. Follow the skill's diagnosis
+and read-only list validation before any project configuration write. Use the
+returned list identity and name to preview the validated destination and
+known assignee mappings. If validation fails, explain the blocker and let the
+user defer or explicitly choose local. On defer, preserve any existing configuration.
 Require explicit approval before writing the configuration, including when
 changing an existing destination. Save it without credentials or remote writes.
 Use `{"mode":"clickup","project_id":"1db31293-15a1-442b-984e-2d4627c4cdc8","list_id":"901234567","assignees":{"Ana":"12345"}}`
