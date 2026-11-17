@@ -7,7 +7,7 @@ description: >
 license: MIT
 metadata:
   author: juancruzrobledo
-  version: "2.4"
+  version: "2.5"
 ---
 
 # Active Orchestrator
@@ -54,13 +54,14 @@ installations or sub-skill dispatches.
 | `kb` | Required | kb-creator | Record domain and decisions. Canonical `knowledge-base/` and `state.kb`. | User input, sources, or usable existing KB. | interview, import, reuse |
 | `visual-design` | Optional | design-system | Agree on a visual policy. `state.visual_design` and visual assets when selected. | Visual surface for system generation. | system-and-mockups, system-only, off, deferred, reuse |
 | `roadmap` | Required | roadmap-generator | Prioritize work and record dependencies. Local `CHANGES.md` and `state.roadmap`. | KB. | local-markdown, reuse |
+| `task-management` | Optional | active-orchestrator | Choose local tracking or a ClickUp list for this project. Configuration in `.active-stack/roadmap.json`. | Validated `CHANGES.md`; for ClickUp, the `active-roadmap` skill and confirmed destination. | local, clickup |
 | `find-skill` | Optional | find-skill | Recommend or install relevant skills. `state.skills`. | Project stack or user-supplied criteria. | recommend, install-selected |
 | `registry` | Optional | skill-registry | Index available skills. `.atl/skill-registry.md` and `state.registry`. | Inventory, after skill installation if selected. | index, reuse |
 | `agents` | Required | agent-instruction | Record operating rules and references. Applicable agent instruction file and `state.agents`. | KB and roadmap; registry when selected or reused. | generate, update, reuse |
 
-Run discovery before KB and the registry before instructions when selected. The
-roadmap variant is local Markdown. Record other roadmap providers as deferred
-extensions with no dispatch. A project without UI can choose visual off or omit
+Run discovery before KB, task management after roadmap, and the registry before
+instructions when selected. The required roadmap remains local Markdown. A
+project without UI can choose visual off or omit
 visual setup. Missing optional phases can be skipped with user confirmation and
 their dependents must be revalidated. Missing required phases block completion
 until the user approves an installation, changes the plan or provides compatible
@@ -84,11 +85,43 @@ when present, so the phase can keep project rules focused on this repository.
 
 `/active-orchestrator:init` and direct activation start route selection or offer to
 resume the approved plan. Existing standalone entrypoints `:discovery`, `:kb`,
-`:design`, `:rules`, `:find-skill`, `:registry` and `:devops` select only
+`:design`, `:rules`, `:find-skill`, `:registry`, `:task-management` and
+`:devops` select only
 their named phase or extension. Check its prerequisites and preview its effects
 before confirmation. Preserve a completed foundation when running a standalone
 phase. If a phase or extension is unavailable, report it and offer read-only ways
 to inspect or satisfy its prerequisites.
+
+### Task management
+
+Resolve paths relative to the project root. Read any existing
+`.active-stack/roadmap.json` and show the saved choice and destination. A project
+without configuration uses local by default. Offer ClickUp only if `active-roadmap` is available
+in the active client. If the skill is unavailable, explain that ClickUp setup
+can be deferred, or use the local option. Preserve existing ClickUp
+configuration when that capability is unavailable.
+
+For ClickUp, preview the exact destination list and known assignee mappings.
+Require explicit approval before writing the configuration, including when
+changing an existing destination. Save it without credentials or remote writes.
+Use `{"mode":"clickup","project_id":"1db31293-15a1-442b-984e-2d4627c4cdc8","list_id":"901234567","assignees":{"Ana":"12345"}}`
+as the shape, with the confirmed nonempty list ID in `list_id` and known
+pairs of exact roadmap names and confirmed account IDs in `assignees`. The
+`workspace_id` is optional. Include it when known. Use strings for IDs and leave
+unknown accounts out of the map. Preserve the existing project ID when editing
+the configuration so linked tasks keep their identity. For a new project
+without a stable ID, generate a UUID once and retain it for future updates.
+
+For an approved explicit local choice, save `{"mode":"local"}`, retaining any
+established `project_id`; if skipped, record the phase choice without writing
+this file. Validate the saved configuration before marking the selected phase done.
+Use the backup and atomic write rules for existing project files.
+
+The roadmap keeps scope and dependencies. ClickUp manages operational
+assignees and status when configured. Point the user to `active-roadmap` for
+preview, confirmation, publication and reconciliation. Foundation setup
+does not publish tasks. Leave existing links and status evidence in
+`.active-stack/roadmap-state.json` intact.
 
 ### Skill search
 
@@ -175,6 +208,9 @@ as skipped.
    retired phase. A completed legacy foundation remains complete unless the user
    identifies missing required output or requests a separately approved update.
    Missing visual policy is undecided and can be set as a standalone phase.
+   Existing approved plans keep their stored phase order. Offer standalone
+   `:task-management` when the user requests task tracking for an existing
+   project with a usable `CHANGES.md`.
 4. If confirmed outputs are missing or changed, describe which phases and dependent
    outcomes are affected and ask for approval before repair or replanning. Preserve
    valid outputs and plugin state. A declined repair leaves the current state as is.

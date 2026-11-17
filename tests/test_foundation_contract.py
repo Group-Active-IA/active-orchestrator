@@ -29,6 +29,38 @@ class FoundationContract(unittest.TestCase):
         self.assertIn("numbered text list", checklist)
         self.assertIn("before writing", checklist)
 
+    def test_task_management_is_optional_and_depends_on_the_local_roadmap(self):
+        phase = next(
+            line for line in section("Phase catalog").splitlines()
+            if line.startswith("| `task-management`")
+        )
+        self.assertIn("| Optional |", phase)
+        self.assertIn("`CHANGES.md`", phase)
+        self.assertIn(".active-stack/roadmap.json", phase)
+        self.assertIn("local, clickup", phase)
+
+    def test_task_management_requires_available_skill_and_approved_config(self):
+        dispatch = section("Dispatch and entrypoints")
+        setup = dispatch.split("### Task management", 1)[1].split("### ", 1)[0]
+        self.assertIn("local by default", setup)
+        self.assertIn("only if `active-roadmap` is available", setup)
+        self.assertIn("before writing the configuration", setup)
+        self.assertIn("without credentials or remote writes", setup)
+        self.assertIn("`:task-management`", dispatch)
+        self.assertIn("`list_id`", setup)
+        self.assertIn("`assignees`", setup)
+
+    def test_clickup_identity_survives_configuration_edits(self):
+        setup = section("Dispatch and entrypoints").split("### Task management", 1)[1]
+        example = re.search(r"Use `({.*})`", setup)
+        config = json.loads(example.group(1))
+        self.assertEqual(config["mode"], "clickup")
+        self.assertIsInstance(config["project_id"], str)
+        self.assertIsInstance(config["list_id"], str)
+        self.assertEqual(config["assignees"], {"Ana": "12345"})
+        self.assertIn("Preserve the existing project ID", setup)
+        self.assertIn("`workspace_id` is optional", setup)
+
     def test_resume_preserves_sections_on_failure_or_migration(self):
         resume = section("State and resume")
         for requirement in ("versions 2–5", "unknown sections", "failed", "reused"):
