@@ -8,7 +8,7 @@ description: >
 license: MIT
 metadata:
   author: juancruzrobledo
-  version: "2.6"
+  version: "2.7"
 ---
 
 # Active Orchestrator
@@ -62,12 +62,14 @@ installations or sub-skill dispatches.
 | `visual-design` | Optional | design-system | Agree on a visual policy. `state.visual_design` and visual assets when selected. | Visual surface for system generation. | system-and-mockups, system-only, off, deferred, reuse |
 | `roadmap` | Required | roadmap-generator | Prioritize work and record dependencies. Local `CHANGES.md` and `state.roadmap`. | KB. | local-markdown, reuse |
 | `task-management` | Optional | active-orchestrator | Choose local tracking or a ClickUp list for this project. Configuration in `.active-stack/roadmap.json`. | Validated `CHANGES.md`; for ClickUp, the `active-roadmap` skill and confirmed destination. | local, clickup |
+| `team-mode` | Optional | active-orchestrator | Define the team and its working rules. `.active-stack/team.json`, `.github/pull_request_template.md`, `.github/CODEOWNERS`, ignore rules for local team files and `state.foundation.phases["team-mode"]`. | Local roadmap; for ClickUp, the `active-roadmap` skill. | new, reuse, update |
 | `find-skill` | Optional | find-skill | Recommend or install relevant skills. `state.skills`. | Project stack or user-supplied criteria. | recommend, install-selected |
 | `registry` | Optional | skill-registry | Index available skills. `.atl/skill-registry.md` and `state.registry`. | Inventory, after skill installation if selected. | index, reuse |
 | `agents` | Required | agent-instruction | Record operating rules and references. Applicable agent instruction file and `state.agents`. | KB and roadmap; registry when selected or reused. | generate, update, reuse |
 
 Run discovery before KB, task management after roadmap, and the registry before
-instructions when selected. The required roadmap remains local Markdown. A
+instructions when selected. Run team mode after task management and before the agent
+instructions, because the team rules section is written together with them. The required roadmap remains local Markdown. A
 project without UI can choose visual off or omit
 visual setup. Missing optional phases can be skipped with user confirmation and
 their dependents must be revalidated. Missing required phases block completion
@@ -92,11 +94,11 @@ when present, so the phase can keep project rules focused on this repository.
 
 `/active-orchestrator:init` and direct activation start route selection or offer to
 resume the approved plan. Existing standalone entrypoints `:discovery`, `:kb`,
-`:design`, `:rules`, `:find-skill`, `:registry`, `:task-management` and
+`:design`, `:rules`, `:find-skill`, `:registry`, `:task-management`, `:team` and
 `:devops` select only
 their named phase or extension. Claude Code has no colon entrypoints: invoke the
 skill as `/active-orchestrator` followed by the action, such as
-`/active-orchestrator init` or `/active-orchestrator kb`, and use that form when
+`/active-orchestrator init`, `/active-orchestrator kb` or `/active-orchestrator team`, and use that form when
 suggesting a command there. Check its prerequisites and preview its effects
 before confirmation. Preserve a completed foundation when running a standalone
 phase. If a phase or extension is unavailable, report it and offer read-only ways
@@ -138,6 +140,105 @@ assignees and status when configured. Point the user to `active-roadmap` for
 preview, confirmation, publication and reconciliation. Foundation setup
 does not publish tasks. Leave existing links and status evidence in
 `.active-stack/roadmap-state.json` intact.
+
+### Team mode
+
+Optional phase for a repository where several people work together. Foundation
+without team mode is unchanged: nothing in this section runs and no team file is
+created. The phase has the variants `new`, `reuse` and `update` and the same
+approval rules as the other phases. Resolve paths relative to the project root.
+
+1. Ask whether this is a team project. If the answer is "no" or "later", nothing is
+   written and the choice is recorded as `skipped` or `deferred`.
+2. Ask for the team: the size is required, an integer at least 2. Names are optional
+   and a missing name stays pending as `Integrante N`. Never invent names or accounts.
+   Ask for the tracking tool (`local` or `clickup`) and for the primary and backup
+   reviewer of risk zones. A GitHub account per member is optional.
+3. Ask about privacy. If the repository is public, explain first that names in
+   `team.json` become visible to anyone, and then ask: "Do we version the names in
+   the repository?" Record the answer as `names_versioned`. With "no", `team.json`
+   carries only `size` and the names and links go to `.active-stack/team.local.json`.
+   Add the ignore rules for `.active-stack/team.local.json` and
+   `.active-stack/me.local.json` to `.gitignore` inside idempotent markers.
+4. For ClickUp, offer it only if `active-roadmap` is available in the active client.
+   Resolve each name with `find_member_by_name` or `resolve_assignees`, confirm each
+   match with the person and save the numeric ID. On no match the member stays
+   unlinked: never guess. If the connector is down or unavailable, tracking stays
+   `local` and the ClickUp link is deferred.
+5. Show a summary of every file to write and every external action, including the
+   `.gitignore` rules, `.github/pull_request_template.md` and `.github/CODEOWNERS`,
+   and wait for explicit approval. A reply that only answers questions is not an
+   approval.
+6. Validate the draft before writing, with the shared contract of `active-delivery`:
+   `sh <active-delivery-dir>/team.sh --root <project> validate --file <draft>` in POSIX
+   shells, or `<active-delivery-dir>\team.bat --root <project> validate --file <draft>`
+   on Windows. If `active-delivery` is not available in the active client (OpenCode
+   and Antigravity do not install it), there is no automatic validator: check the draft
+   against these rules instead and say so. The size is an integer at least 2; there are
+   at most `size` members; ids are unique, in lowercase letters, digits and hyphens;
+   `tracking` is `local` or `clickup`; `clickup_id` appears only with `clickup`; there
+   are no unknown fields. No field or file accepts credentials. Show errors as they are
+   and never repair team data on your own.
+7. Write the files. Back up existing files before changes and write atomically. Write
+   `.active-stack/team.json`, then `.github/pull_request_template.md` and
+   `.github/CODEOWNERS`. Copy the template as it is from
+   `assets/pull_request_template.md` (the six handoff facts) and follow the format of
+   `assets/CODEOWNERS.example`; never invent other content for them. Never overwrite an existing `.github/CODEOWNERS` or
+   `.github/pull_request_template.md`: show the diff and propose the merge.
+   Build `CODEOWNERS` from the `Zona` of each ficha in `CHANGES.md` plus the primary
+   and backup reviewer. Members without `github` are left out of the file, with a note.
+8. Dispatch `agent-instruction` to write the team rules section, delimited by
+   `<!-- active-stack:team-mode -->` and `<!-- /active-stack:team-mode -->`, in the
+   project instruction file of each approved agent. Pass the confirmed team. The
+   orchestrator does not write the project instruction file itself.
+9. Protecting `main` on GitHub is only offered. Offer it once: a pull request required, a required check if
+   one exists and no force-push. Show the `gh` command and run it only after explicit
+   confirmation. Without permission or on an unsupported plan, say so and leave the
+   convention written in the rules. Record the choice in the state so the phase does
+   not ask again.
+10. Record `foundation.phases["team-mode"]` in the foundation state. Mark it `done`
+    only after verifying that every approved file exists and passes validation.
+    `team.json`, the phase record and the rules section are written together: other
+    tools read that record as the signal of a team project. Propose a single commit
+    with them. Never commit or push on your own.
+
+Foundation does not choose the person's identity on its own. After the files are
+verified, offer the person doing the foundation to pick their own seat: suggest the
+member that matches the account in `github` (read with `gh api user`), or let them
+choose from the list, or leave them in consult mode (read-only) if nobody matches.
+Write `.active-stack/me.local.json` only after the person confirms; it is local and
+never versioned. The person can skip this step. Everyone else chooses theirs on their
+first session through `active-delivery`.
+
+For a fresh clone where `team.json` already exists in `.active-stack/`, use the `reuse`
+variant: validate it, never rewrite an existing `team.json`, and offer to create the
+missing local files (`me.local.json`, and `team.local.json` when names are not
+versioned) with the same approval rules. For a partial foundation, inspect the files
+first and continue only with what is missing, following the resume rules.
+
+Foundation does not hide the phase in OpenCode and Antigravity: it records the team, the
+rules and the convention there, and says that the guided delivery flow does not exist
+in that client. The phase needs no Claude-only or Codex-only tools. Without
+`active-roadmap`, tracking stays `local`. A project that already has the files can
+`reuse` them after read-only validation.
+
+#### Update team
+
+Entrypoint `:team` (`/active-orchestrator team` in Claude Code); `active-delivery` can
+invoke it too. It changes the team without regenerating the approved foundation:
+add or remove members, rename them, complete pending names, change the team size,
+link or fix GitHub and ClickUp accounts, and switch tracking between `local` and
+`clickup`.
+
+- Show a preview of the diff of `team.json`, of `CODEOWNERS` and of the fichas whose
+  `Responsable` becomes orphaned. Propose reassigning them. Nothing is reassigned
+  without approval, and fichas already started are not touched.
+- It is idempotent: the same input produces the same bytes. Use `version` in
+  `team.json` to migrate the format; an unknown version pauses with a clear error.
+- A person who joins later clones the repository and chooses an identity through
+  `active-delivery`; update links them if the seat is pending.
+- When resuming, report what is still pending: names without a value, ClickUp
+  without a link and `main` without protection.
 
 ### Skill search
 

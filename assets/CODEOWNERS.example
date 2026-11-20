@@ -1,0 +1,5 @@
+# Built from the Zona of each ficha in CHANGES.md and the risk reviewers.
+# Format: <path> @primary-reviewer @backup-reviewer
+# Members without a `github` handle are left out and noted in the summary.
+src/payments/ @github-handle @github-handle
+docs/ @github-handle @github-handle
