@@ -8,7 +8,7 @@ description: >
 license: MIT
 metadata:
   author: juancruzrobledo
-  version: "2.7"
+  version: "2.8"
 ---
 
 # Active Orchestrator
@@ -63,13 +63,14 @@ installations or sub-skill dispatches.
 | `roadmap` | Required | roadmap-generator | Prioritize work and record dependencies. Local `CHANGES.md` and `state.roadmap`. | KB. | local-markdown, reuse |
 | `task-management` | Optional | active-orchestrator | Choose local tracking or a ClickUp list for this project. Configuration in `.active-stack/roadmap.json`. | Validated `CHANGES.md`; for ClickUp, the `active-roadmap` skill and confirmed destination. | local, clickup |
 | `team-mode` | Optional | active-orchestrator | Define the team and its working rules. `.active-stack/team.json`, `.github/pull_request_template.md`, `.github/CODEOWNERS`, ignore rules for local team files and `state.foundation.phases["team-mode"]`. | Local roadmap; for ClickUp, the `active-roadmap` skill. | new, reuse, update |
+| `memory-policy` | Optional | active-orchestrator | Choose the team memory policy for this project. `.engram/config.json` and `.engram/active-stack.json` (written by `active-stack memory init`, only for `cloud-branch`), ignore rules in `.gitignore`, and `state.foundation.phases["memory-policy"]`. | The `active-stack` command; a Git repository. | cloud-branch, local, deferred, reuse |
 | `find-skill` | Optional | find-skill | Recommend or install relevant skills. `state.skills`. | Project stack or user-supplied criteria. | recommend, install-selected |
 | `registry` | Optional | skill-registry | Index available skills. `.atl/skill-registry.md` and `state.registry`. | Inventory, after skill installation if selected. | index, reuse |
 | `agents` | Required | agent-instruction | Record operating rules and references. Applicable agent instruction file and `state.agents`. | KB and roadmap; registry when selected or reused. | generate, update, reuse |
 
 Run discovery before KB, task management after roadmap, and the registry before
 instructions when selected. Run team mode after task management and before the agent
-instructions, because the team rules section is written together with them. The required roadmap remains local Markdown. A
+instructions, because the team rules section is written together with them. Run memory policy after team mode and before the agent instructions. The required roadmap remains local Markdown. A
 project without UI can choose visual off or omit
 visual setup. Missing optional phases can be skipped with user confirmation and
 their dependents must be revalidated. Missing required phases block completion
@@ -94,11 +95,11 @@ when present, so the phase can keep project rules focused on this repository.
 
 `/active-orchestrator:init` and direct activation start route selection or offer to
 resume the approved plan. Existing standalone entrypoints `:discovery`, `:kb`,
-`:design`, `:rules`, `:find-skill`, `:registry`, `:task-management`, `:team` and
+`:design`, `:rules`, `:find-skill`, `:registry`, `:task-management`, `:team`, `:memory` and
 `:devops` select only
 their named phase or extension. Claude Code has no colon entrypoints: invoke the
 skill as `/active-orchestrator` followed by the action, such as
-`/active-orchestrator init`, `/active-orchestrator kb` or `/active-orchestrator team`, and use that form when
+`/active-orchestrator init`, `/active-orchestrator kb`, `/active-orchestrator team` or `/active-orchestrator memory`, and use that form when
 suggesting a command there. Check its prerequisites and preview its effects
 before confirmation. Preserve a completed foundation when running a standalone
 phase. If a phase or extension is unavailable, report it and offer read-only ways
@@ -240,6 +241,82 @@ link or fix GitHub and ClickUp accounts, and switch tracking between `local` and
 - When resuming, report what is still pending: names without a value, ClickUp
   without a link and `main` without protection.
 
+### Memory policy
+
+Optional phase that records how the team memory (Engram) works in this project.
+Foundation without memory policy is unchanged: nothing in this section runs, no
+`.engram/` file is touched and no state record is added. The phase has the choices
+`cloud-branch`, `local` and `deferred`, plus `reuse` when a choice is already recorded,
+and the same approval rules as the other phases. It needs a shell command and no
+client-specific tool, so it is offered the same way in Codex, Claude, OpenCode and
+Antigravity. Resolve paths relative to the project root.
+
+1. Offer the choice once, with a short explanation:
+   - `cloud-branch`: the project pins its Engram project name and the team policy in two
+     versioned files. It invokes `active-stack memory init` (see below).
+   - `local`: memory stays personal and local. It does not invoke `active-stack memory init`
+     and writes no `.engram/` file; the choice is only recorded.
+   - `deferred`: decide later. It does not invoke `active-stack memory init` and writes no
+     `.engram/` file; the choice is only recorded and the phase never asks again.
+2. For `cloud-branch`, check that the project is a Git repository and that `active-stack`
+   is available. If `active-stack` is not available, say so, the phase stays `pending`
+   and never create the files by hand: never write `.engram/config.json` or
+   `.engram/active-stack.json` yourself, and never edit `.gitignore` for them.
+3. Show a summary of what `cloud-branch` writes: `.engram/config.json` (the
+   `project_name` key, completed without touching other keys), `.engram/active-stack.json`
+   (`{"memory_policy":"cloud-branch"}`), the `.gitignore` block that ignores the rest of
+   `.engram/`, a backup of the files that already exist, and the state record. Wait for
+   explicit approval. A reply that only answers questions is not an approval.
+4. Run `active-stack memory init --json --project <project root>` and read its JSON
+   (`status`, `reason`, `project_name`, `files`, `warnings`, `proposed_commit`). The project
+   name is derived from the `origin` remote or the folder; the person must confirm it. If
+   the command stops with `name_not_confirmed`, show the derived name, ask, and run it
+   again with `--name <confirmed name>`. Never pass `--yes` on the person's behalf.
+   - Exit code `0` (`status: ok`): the files are ready or already up to date.
+   - Exit code `3` (`status: needs_decision`): it stopped so as not to overwrite something
+     of the person (`conflict_value`, `conflict_ignored_dir`, `conflict_still_ignored`,
+     `conflict_not_ignored`, `name_declined`). Show the `reason` and `detail` as they are.
+     Never force or overwrite, never retry with other values on your own, and leave the
+     phase `pending` until the person resolves the conflict.
+   - Exit code `1` (`status: error`, for example `invalid_file`, `not_git_repo`,
+     `git_missing`, `backup_failed`, `failed`): report it as it is and leave the phase `pending`.
+   - Exit code `2` is a wrong invocation: fix the call, not the project.
+5. Show the proposed commit from `proposed_commit` (message, files and commands) and the
+   `warnings` as they are. The commit is only proposed: never run `git add`, `git commit`
+   or `git push`; the person runs it, or decides not to. If nothing is pending, say so.
+6. Record the choice in `.active-orchestrator-state.json` as
+   `foundation.phases["memory-policy"]`, and nowhere else (DA-07): do not copy it to
+   `.active-stack/roadmap.json`, because the choice belongs to the foundation and a
+   second copy could drift. Shape:
+   `{"variant":"cloud-branch","status":"done","requires":[],"outputs":[".engram/config.json",".engram/active-stack.json"],"decided_on":"2026-11-21"}`.
+   `variant` is `cloud-branch`, `local` or `deferred`; `status` is `pending`, `done` or
+   `deferred`; `decided_on` is the date of the approval. The record is `done` only after
+   `memory init` ended with exit code `0` and the files were verified; a `cloud-branch`
+   that has not run yet or stopped is `pending`; `local` is `done` once approved and has
+   no outputs; `deferred` is `deferred`. Record it outside the execution order, like the
+   other optional decisions. Back up the state, write atomically, reread it, preserve
+   all existing and unknown sections, and do not change the schema version or `step`.
+   Versions 2 to 5 of the file stay valid: never rewind or replay a completed phase just
+   to add this record, and keep `step: done` when the foundation was complete. If the
+   file has no `foundation` section, add only this record after approval.
+
+Resume and reuse work like `visual_design`: read the record before asking anything.
+With `done`, report the recorded choice and do not ask again; offer to verify the two
+files read-only if `cloud-branch`. With `pending`, offer to resume: run
+`active-stack memory init` again, which is idempotent and reports a no-op when
+everything is up to date. With `deferred`, the phase never asks again: unlike
+`visual_design`, no later step revisits it, and only an explicit `:memory`
+(`/active-orchestrator memory` in Claude Code) can change the choice, with a preview and
+approval. With no record, the choice has not been made: offer it once as part of the
+checklist, where skipping is allowed and leaves the file untouched.
+
+The marker acts only where the `engram-cloud` harness is installed, which is Claude and
+Codex. In OpenCode and Antigravity the phase still records the choice and runs the
+command, and says plainly that the marker has no effect there. Never copy the
+`active-stack:engram-cloud` section or its rules into any project file: the harness owns
+it in the global instruction file. Write no token or credential anywhere; the command
+reads and writes none.
+
 ### Skill search
 
 For either variant, dispatch `find-skill` in **recommend-only** mode. Pass
@@ -325,6 +402,8 @@ as skipped.
    retired phase. A completed legacy foundation remains complete unless the user
    identifies missing required output or requests a separately approved update.
    Missing visual policy is undecided and can be set as a standalone phase.
+   A missing `memory-policy` record means the memory policy has not been decided, not
+   that the user opted out; it can be set with the standalone `:memory` phase.
    Existing approved plans keep their stored phase order. Offer standalone
    `:task-management` when the user requests task tracking for an existing
    project with a usable `CHANGES.md`.
