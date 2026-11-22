@@ -259,7 +259,7 @@ Antigravity. Resolve paths relative to the project root.
    - `deferred`: decide later. It does not invoke `active-stack memory init` and writes no
      `.engram/` file; the choice is only recorded and the phase never asks again.
 2. For `cloud-branch`, check that the project is a Git repository and that `active-stack`
-   is available. If `active-stack` is not available, say so, the phase stays `pending`
+   is available. If `active-stack` is not available, say so; the phase stays `pending`
    and never create the files by hand: never write `.engram/config.json` or
    `.engram/active-stack.json` yourself, and never edit `.gitignore` for them.
 3. Show a summary of what `cloud-branch` writes: `.engram/config.json` (the
