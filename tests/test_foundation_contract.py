@@ -31,20 +31,20 @@ class FoundationContract(unittest.TestCase):
         self.assertIn("no foundation writes", route)
         self.assertRegex(route, "(?i)reassess if scope or coordination grows")
 
-    def test_checklist_keeps_three_required_outputs(self):
+    def test_checklist_requires_foundation_outputs_and_tracking_choice(self):
         table = section("Phase catalog")
         required = re.findall(r"^\| `([a-z-]+)` \| Required \|", table, re.MULTILINE)
-        self.assertEqual(required, ["kb", "roadmap", "agents"])
+        self.assertEqual(required, ["kb", "roadmap", "task-management", "agents"])
         checklist = section("Checklist and approval")
         self.assertIn("numbered text list", checklist)
         self.assertIn("before writing", checklist)
 
-    def test_task_management_is_optional_and_depends_on_the_local_roadmap(self):
+    def test_task_management_is_required_and_depends_on_the_local_roadmap(self):
         phase = next(
             line for line in section("Phase catalog").splitlines()
             if line.startswith("| `task-management`")
         )
-        self.assertIn("| Optional |", phase)
+        self.assertIn("| Required |", phase)
         self.assertIn("`CHANGES.md`", phase)
         self.assertIn(".active-stack/roadmap.json", phase)
         self.assertIn("local, clickup", phase)
@@ -52,8 +52,12 @@ class FoundationContract(unittest.TestCase):
     def test_task_management_requires_available_skill_and_approved_config(self):
         dispatch = section("Dispatch and entrypoints")
         setup = dispatch.split("### Task management", 1)[1].split("### ", 1)[0]
-        self.assertIn("local by default", setup)
-        self.assertIn("only if `active-roadmap` is available", setup)
+        checklist = section("Checklist and approval")
+        self.assertIn('Will this project use ClickUp?', checklist)
+        self.assertIn("explicit yes", checklist)
+        self.assertIn("answers on every client", checklist)
+        self.assertIn("legacy skipped or deferred phase records", setup)
+        self.assertIn("reuse the explicit choice on", setup)
         self.assertIn("before writing the configuration", setup)
         self.assertIn("without credentials or remote writes", setup)
         self.assertIn("`:task-management`", dispatch)
@@ -82,10 +86,26 @@ class FoundationContract(unittest.TestCase):
 
     def test_failed_destination_validation_preserves_existing_configuration(self):
         setup = section("Dispatch and entrypoints").split("### Task management", 1)[1]
-        self.assertIn("If validation fails", setup)
-        self.assertIn("defer or explicitly choose local", setup)
+        self.assertIn("the list lacks required statuses", setup)
+        self.assertIn("`status: pending`", setup)
+        self.assertRegex(setup, r"explicitly\s+choose local")
         self.assertIn("preserve any existing configuration", setup)
         self.assertIn("Save it without credentials or remote writes", setup)
+
+    def test_clickup_requires_workflow_statuses_before_task_management_completes(self):
+        setup = section("Dispatch and entrypoints").split("### Task management", 1)[1].split("### ", 1)[0]
+        self.assertIn("`clickup_get_list`", setup)
+        self.assertIn("statuses <snapshot.json>", setup)
+        for label in ("Pendiente", "En desarrollo", "En revisión", "Cambios solicitados", "Fusionado", "Archivado"):
+            self.assertIn(label, setup)
+        self.assertLess(setup.index("then read the list again"), setup.index("Mark the phase `done`"))
+
+    def test_resume_reuses_existing_choices_and_prompts_for_unfinished_legacy_plans(self):
+        resume = section("State and resume")
+        self.assertIn("without an explicit task-management decision", resume)
+        self.assertIn("ask the required", resume)
+        self.assertIn("without replaying completed phases", resume)
+        self.assertIn("completed legacy foundation remains complete", resume)
 
     def test_resume_preserves_sections_on_failure_or_migration(self):
         resume = section("State and resume")

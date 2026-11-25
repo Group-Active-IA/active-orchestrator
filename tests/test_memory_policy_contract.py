@@ -46,7 +46,7 @@ class MemoryPhaseCatalogTests(unittest.TestCase):
 
     def test_memory_policy_never_becomes_a_required_output(self):
         required = re.findall(r"^\| `([a-z-]+)` \| Required \|", section("Phase catalog"), re.MULTILINE)
-        self.assertEqual(required, ["kb", "roadmap", "agents"])
+        self.assertEqual(required, ["kb", "roadmap", "task-management", "agents"])
 
     def test_memory_policy_runs_after_team_mode_and_before_the_rules(self):
         order = catalog_order()

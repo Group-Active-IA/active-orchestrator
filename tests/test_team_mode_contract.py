@@ -38,7 +38,7 @@ class TeamPhaseCatalogTests(unittest.TestCase):
 
     def test_team_mode_never_becomes_a_required_output(self):
         required = re.findall(r"^\| `([a-z-]+)` \| Required \|", section("Phase catalog"), re.MULTILINE)
-        self.assertEqual(required, ["kb", "roadmap", "agents"])
+        self.assertEqual(required, ["kb", "roadmap", "task-management", "agents"])
 
     def test_team_mode_runs_after_task_management_and_before_the_rules(self):
         catalog = section("Phase catalog")
@@ -119,7 +119,7 @@ class TeamFoundationFlowTests(unittest.TestCase):
         self.assertRegex(flow, r"(?i)confirm .{0,40}with the person")
         self.assertRegex(flow, r"(?i)no match.{0,60}unlinked")
         self.assertRegex(flow, r"(?i)connector is (?:down|unavailable)")
-        self.assertRegex(flow, r"(?i)only if `active-roadmap` is available")
+        self.assertIn("preserve the approved tracking mode", flow)
 
     def test_main_protection_is_offered_once_and_needs_confirmation(self):
         flow = team_mode()
@@ -194,7 +194,7 @@ class TeamClientCompatibilityTests(unittest.TestCase):
     def test_phase_does_not_require_claude_or_codex_only_tools(self):
         flow = team_mode()
         self.assertRegex(flow, r"(?i)no .{0,30}Claude.{0,30}Codex.{0,30}(?:tool|capabilit)")
-        self.assertRegex(flow, r"(?i)tracking stays `local`")
+        self.assertIn("Use the tracking tool chosen in task management", flow)
 
 
 class TeamTemplatesTests(unittest.TestCase):
