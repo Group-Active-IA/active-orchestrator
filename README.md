@@ -8,11 +8,13 @@ files.
 ## Foundation
 
 The orchestrator previews a checklist before any write. A foundation includes
-a knowledge base, a local roadmap and agent instructions. Each can be reused
-when the project already has a compatible artifact. Product discovery, visual
-design, skill search and the skill registry are optional. Each selection shows
-its variant, dependencies and outputs. Use native multi-select where available
-or reply to the numbered text list.
+a knowledge base, a local roadmap, an explicit tracking choice and agent
+instructions. Compatible artifacts and approved choices can be reused. Choose
+whether to use ClickUp in the checklist. With ClickUp, setup verifies the
+destination list and its development statuses before foundation completes.
+Product discovery, visual design, skill search and the skill registry are
+optional. Each selection shows its variant, dependencies and outputs. Use
+native multi-select where available or reply to the numbered text list.
 
 Approve the ordered plan to run it. Phase-specific approvals still apply when
 needed, for example when installing global skills or approving visual assets.
@@ -25,6 +27,7 @@ and can resume after an interruption. Older foundation files remain compatible.
 | `/active-orchestrator:discovery` | Run product discovery |
 | `/active-orchestrator:kb` | Create, import or reuse a KB |
 | `/active-orchestrator:design` | Set or revise the visual policy |
+| `/active-orchestrator:task-management` | Choose local tracking or configure ClickUp |
 | `/active-orchestrator:rules` | Generate, update or reuse agent instructions |
 | `/active-orchestrator:find-skill` | Find project skills |
 | `/active-orchestrator:registry` | Index available skills |

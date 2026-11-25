@@ -8,7 +8,7 @@ description: >
 license: MIT
 metadata:
   author: juancruzrobledo
-  version: "2.8"
+  version: "2.9"
 ---
 
 # Active Orchestrator
@@ -34,9 +34,12 @@ installations or sub-skill dispatches.
    the same fields, their inputs and outputs, and their state owner.
 3. Offer multi-select and variant choice using native controls if available.
    Otherwise show a numbered text list and accept e.g. `1=reuse, 2=local-markdown,
-   3=generate, 5=off`. Require all three core outputs. Mark missing prerequisites
-   as blockers and explain any prerequisites brought in by an option. Resolve all
-   variants before approval. Show explicit skipped and deferred options.
+   3=generate, 5=off`. Require the core outputs and the tracking decision.
+   Ask "Will this project use ClickUp?" with explicit yes (`clickup`) and no
+   (`local`) answers on every client unless a confirmed choice already exists.
+   Resolve that decision and the other variants before approval. Mark missing
+   prerequisites as blockers and show which optional phases can be skipped or
+   deferred.
 4. Summarize the ordered plan, reuse choices, writes, installs and external actions.
    List every file each phase writes, including the policy record that
    `visual-design` keeps in `design-system/README.md` even for `off`.
@@ -61,12 +64,12 @@ installations or sub-skill dispatches.
 | `kb` | Required | kb-creator | Record domain and decisions. Canonical `knowledge-base/` and `state.kb`. | User input, sources, or usable existing KB. | interview, import, reuse |
 | `visual-design` | Optional | design-system | Agree on a visual policy. `state.visual_design` and visual assets when selected. | Visual surface for system generation. | system-and-mockups, system-only, off, deferred, reuse |
 | `roadmap` | Required | roadmap-generator | Prioritize work and record dependencies. Local `CHANGES.md` and `state.roadmap`. | KB. | local-markdown, reuse |
-| `task-management` | Optional | active-orchestrator | Choose local tracking or a ClickUp list for this project. Configuration in `.active-stack/roadmap.json`. | Validated `CHANGES.md`; for ClickUp, the `active-roadmap` skill and confirmed destination. | local, clickup |
+| `task-management` | Required | active-orchestrator | Record the explicit tracking decision in `state.foundation.phases["task-management"]` and configure `.active-stack/roadmap.json`. | Validated `CHANGES.md`; for ClickUp, the `active-roadmap` skill, verified list and available development statuses. | local, clickup |
 | `team-mode` | Optional | active-orchestrator | Define the team and its working rules. `.active-stack/team.json`, `.github/pull_request_template.md`, `.github/CODEOWNERS`, ignore rules for local team files and `state.foundation.phases["team-mode"]`. | Local roadmap; for ClickUp, the `active-roadmap` skill. | new, reuse, update |
 | `memory-policy` | Optional | active-orchestrator | Choose the team memory policy for this project. `.engram/config.json` and `.engram/active-stack.json` (written by `active-stack memory init`, only for `cloud-branch`), ignore rules in `.gitignore`, and `state.foundation.phases["memory-policy"]`. | The `active-stack` command; a Git repository. | cloud-branch, local, deferred, reuse |
 | `find-skill` | Optional | find-skill | Recommend or install relevant skills. `state.skills`. | Project stack or user-supplied criteria. | recommend, install-selected |
 | `registry` | Optional | skill-registry | Index available skills. `.atl/skill-registry.md` and `state.registry`. | Inventory, after skill installation if selected. | index, reuse |
-| `agents` | Required | agent-instruction | Record operating rules and references. Applicable agent instruction file and `state.agents`. | KB and roadmap; registry when selected or reused. | generate, update, reuse |
+| `agents` | Required | agent-instruction | Record operating rules and references. Applicable agent instruction file and `state.agents`. | KB, roadmap and tracking decision; registry when selected or reused. | generate, update, reuse |
 
 Run discovery before KB, task management after roadmap, and the registry before
 instructions when selected. Run team mode after task management and before the agent
@@ -107,22 +110,50 @@ to inspect or satisfy its prerequisites.
 
 ### Task management
 
-Resolve paths relative to the project root. Read any existing
-`.active-stack/roadmap.json` and show the saved choice and destination. A project
-without configuration uses local by default. Offer ClickUp only if `active-roadmap` is available
-in the active client. If the skill is unavailable, explain that ClickUp setup
-can be deferred, or use the local option. Preserve existing ClickUp
-configuration when that capability is unavailable.
+Resolve paths relative to the project root. Read the approved
+`foundation.phases["task-management"]` record and any existing
+`.active-stack/roadmap.json`. Show the saved choice and destination. An approved
+`variant: local` answers no and an approved `variant: clickup` answers yes.
+Without an approved choice, treat legacy skipped or deferred phase records as
+undecided. In the standalone phase, ask the same explicit yes/no question.
+If a legacy configuration already exists, show it for explicit confirmation
+before adopting it. Once approved, reuse the explicit choice on resume. If
+the saved choice and configuration disagree, preview the repair and obtain
+approval.
+
+For an approved explicit local choice, save `{"mode":"local"}`, retaining any
+established `project_id`. Validate the saved configuration before marking the
+phase `done`. Use the backup and atomic write rules for existing project files.
 
 When the user chooses ClickUp, invoke `active-roadmap` in `configure` mode.
 Pass the project root and saved destination, if any. Ask for the target list
 and optional workspace when they are unknown. Follow the skill's diagnosis
-and read-only list validation before any project configuration write. Use the
-returned list identity and name to preview the validated destination and
-known assignee mappings. If validation fails, explain the blocker and let the
-user defer or explicitly choose local. On defer, preserve any existing configuration.
-Require explicit approval before writing the configuration, including when
-changing an existing destination. Save it without credentials or remote writes.
+and read-only list validation before any project configuration write. Use
+`clickup_get_list` with the confirmed list and workspace IDs. Extract the returned
+status names into a temporary JSON array of strings, then run:
+
+```text
+python -B <active-roadmap-dir>/roadmap.py --root <project> statuses <snapshot.json>
+```
+
+The list must offer Pendiente, En desarrollo, En revisión, Cambios solicitados,
+Fusionado and Archivado. If a status is missing, show the exact list and missing
+names. Ask a list administrator to add them in the ClickUp List's task status
+settings, then read the list again. Preserve unrelated statuses. Use Archivado
+as the workflow status for a completed change. Actual task archival is a
+separate ClickUp action.
+
+If the skill or connector is unavailable, the destination cannot be verified or
+the list lacks required statuses, record the approved ClickUp choice with
+`status: pending` and explain how to resolve the blocker. Keep the approved
+choice and preserve any existing configuration. The user can pause and complete
+configuration later from a client with the skill and connector, or explicitly
+choose local and approve the updated plan. Apply the same question and pending
+behavior in every client.
+
+Once the list and statuses are verified, preview the validated destination and
+known assignee mappings. Require explicit approval before writing the configuration,
+including when changing an existing destination. Save it without credentials or remote writes.
 Use `{"mode":"clickup","project_id":"1db31293-15a1-442b-984e-2d4627c4cdc8","list_id":"901234567","assignees":{"Ana":"12345"}}`
 as the shape, with the confirmed nonempty list ID in `list_id` and known
 pairs of exact roadmap names and confirmed account IDs in `assignees`. The
@@ -130,11 +161,7 @@ pairs of exact roadmap names and confirmed account IDs in `assignees`. The
 unknown accounts out of the map. Preserve the existing project ID when editing
 the configuration so linked tasks keep their identity. For a new project
 without a stable ID, generate a UUID once and retain it for future updates.
-
-For an approved explicit local choice, save `{"mode":"local"}`, retaining any
-established `project_id`; if skipped, record the phase choice without writing
-this file. Validate the saved configuration before marking the selected phase done.
-Use the backup and atomic write rules for existing project files.
+Mark the phase `done` after verifying the saved configuration.
 
 The roadmap keeps scope and dependencies. ClickUp manages operational
 assignees and status when configured. Point the user to `active-roadmap` for
@@ -153,7 +180,7 @@ approval rules as the other phases. Resolve paths relative to the project root.
    written and the choice is recorded as `skipped` or `deferred`.
 2. Ask for the team: the size is required, an integer at least 2. Names are optional
    and a missing name stays pending as `Integrante N`. Never invent names or accounts.
-   Ask for the tracking tool (`local` or `clickup`) and for the primary and backup
+   Use the tracking tool chosen in task management. Ask for the primary and backup
    reviewer of risk zones. A GitHub account per member is optional.
 3. Ask about privacy. If the repository is public, explain first that names in
    `team.json` become visible to anyone, and then ask: "Do we version the names in
@@ -161,11 +188,11 @@ approval rules as the other phases. Resolve paths relative to the project root.
    carries only `size` and the names and links go to `.active-stack/team.local.json`.
    Add the ignore rules for `.active-stack/team.local.json` and
    `.active-stack/me.local.json` to `.gitignore` inside idempotent markers.
-4. For ClickUp, offer it only if `active-roadmap` is available in the active client.
-   Resolve each name with `find_member_by_name` or `resolve_assignees`, confirm each
-   match with the person and save the numeric ID. On no match the member stays
-   unlinked: never guess. If the connector is down or unavailable, tracking stays
-   `local` and the ClickUp link is deferred.
+4. For approved ClickUp tracking, resolve each name with `find_member_by_name`
+   or `resolve_assignees`, confirm each match with the person and save the
+   numeric ID. On no match the member stays unlinked. If the connector is
+   down or unavailable after setup, preserve the approved tracking mode and
+   leave unresolved member links pending.
 5. Show a summary of every file to write and every external action, including the
    `.gitignore` rules, `.github/pull_request_template.md` and `.github/CODEOWNERS`,
    and wait for explicit approval. A reply that only answers questions is not an
@@ -212,16 +239,18 @@ never versioned. The person can skip this step. Everyone else chooses theirs on 
 first session through `active-delivery`.
 
 For a fresh clone where `team.json` already exists in `.active-stack/`, use the `reuse`
-variant: validate it, never rewrite an existing `team.json`, and offer to create the
-missing local files (`me.local.json`, and `team.local.json` when names are not
-versioned) with the same approval rules. For a partial foundation, inspect the files
-first and continue only with what is missing, following the resume rules.
+variant: validate it against the approved tracking choice. In reuse, never
+rewrite an existing `team.json`. Offer to create the missing local files
+(`me.local.json`, and `team.local.json` when names are not versioned) with the
+same approval rules. For a partial foundation, inspect the files first and
+continue only with what is missing, following the resume rules.
+If existing team tracking differs from the approved project choice, preview the
+repair under Update team and obtain approval before rewriting `team.json`.
 
 Foundation does not hide the phase in OpenCode and Antigravity: it records the team, the
 rules and the convention there, and says that the guided delivery flow does not exist
-in that client. The phase needs no Claude-only or Codex-only tools. Without
-`active-roadmap`, tracking stays `local`. A project that already has the files can
-`reuse` them after read-only validation.
+in that client. The phase needs no Claude-only or Codex-only tools. A project
+that already has the files can `reuse` them after read-only validation.
 
 #### Update team
 
@@ -229,7 +258,8 @@ Entrypoint `:team` (`/active-orchestrator team` in Claude Code); `active-deliver
 invoke it too. It changes the team without regenerating the approved foundation:
 add or remove members, rename them, complete pending names, change the team size,
 link or fix GitHub and ClickUp accounts, and switch tracking between `local` and
-`clickup`.
+`clickup` through the task-management phase. Verify the approved destination and
+status configuration before changing team tracking to ClickUp.
 
 - Show a preview of the diff of `team.json`, of `CODEOWNERS` and of the fichas whose
   `Responsable` becomes orphaned. Propose reassigning them. Nothing is reassigned
@@ -365,11 +395,12 @@ Example after approval in a fresh project:
   "owner": "active-orchestrator",
   "foundation": {
     "version": 1,
-    "order": ["kb", "roadmap", "agents"],
+    "order": ["kb", "roadmap", "task-management", "agents"],
     "phases": {
       "kb": {"variant": "import", "status": "pending", "requires": [], "outputs": ["knowledge-base/"]},
       "roadmap": {"variant": "local-markdown", "status": "pending", "requires": ["kb"], "outputs": ["CHANGES.md"]},
-      "agents": {"variant": "generate", "status": "pending", "requires": ["kb", "roadmap"], "outputs": ["AGENTS.md"]}
+      "task-management": {"variant": "local", "status": "pending", "requires": ["roadmap"], "outputs": [".active-stack/roadmap.json"]},
+      "agents": {"variant": "generate", "status": "pending", "requires": ["kb", "roadmap", "task-management"], "outputs": ["AGENTS.md"]}
     }
   }
 }
@@ -404,9 +435,12 @@ as skipped.
    Missing visual policy is undecided and can be set as a standalone phase.
    A missing `memory-policy` record means the memory policy has not been decided, not
    that the user opted out; it can be set with the standalone `:memory` phase.
-   Existing approved plans keep their stored phase order. Offer standalone
-   `:task-management` when the user requests task tracking for an existing
-   project with a usable `CHANGES.md`.
+   Preserve the relative order in existing approved plans. For an unfinished
+   foundation without an explicit task-management decision, ask the required
+   ClickUp question and obtain approval to insert the phase after `roadmap`
+   without replaying completed phases. Offer standalone `:task-management`
+   when the user requests task tracking for a completed foundation with a
+   usable `CHANGES.md`.
 4. If confirmed outputs are missing or changed, describe which phases and dependent
    outcomes are affected and ask for approval before repair or replanning. Preserve
    valid outputs and plugin state. A declined repair leaves the current state as is.
