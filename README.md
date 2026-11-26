@@ -7,14 +7,17 @@ files.
 
 ## Foundation
 
-The orchestrator previews a checklist before any write. A foundation includes
-a knowledge base, a local roadmap, an explicit tracking choice and agent
-instructions. Compatible artifacts and approved choices can be reused. Choose
-whether to use ClickUp in the checklist. With ClickUp, setup verifies the
-destination list and its development statuses before foundation completes.
-Product discovery, visual design, skill search and the skill registry are
-optional. Each selection shows its variant, dependencies and outputs. Use
-native multi-select where available or reply to the numbered text list.
+The orchestrator previews a checklist before any write. It lists every phase
+with its benefit and the cost of skipping it, then lets you choose with the
+client's selector or a numbered list. Choosing is separate from approving. A
+foundation includes a knowledge base, a local roadmap, an explicit tracking
+choice and agent instructions. Compatible artifacts and approved choices can be
+reused. Choose whether to use ClickUp in the checklist. With ClickUp, setup
+verifies the destination list and its development statuses before foundation
+completes. Product discovery, visual design, skill search and the skill
+registry are optional. Each selection shows its variant, dependencies and
+outputs. Use native multi-select where available or reply to the numbered text
+list.
 
 Approve the ordered plan to run it. Phase-specific approvals still apply when
 needed, for example when installing global skills or approving visual assets.
