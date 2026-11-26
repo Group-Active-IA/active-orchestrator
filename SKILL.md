@@ -8,7 +8,7 @@ description: >
 license: MIT
 metadata:
   author: juancruzrobledo
-  version: "2.9"
+  version: "2.10"
 ---
 
 # Active Orchestrator
@@ -28,18 +28,27 @@ installations or sub-skill dispatches.
 
 1. Inspect the repository read-only. Detect existing state, outputs, available
    skills, external prerequisites, target agent and interface capabilities.
-2. Show a single checklist for foundation. For every phase show its purpose, expected
-   artifacts, required or optional status, prerequisites, available variants, and
-   reusable files with paths. Include extensions only when their contracts provide
-   the same fields, their inputs and outputs, and their state owner.
-3. Offer multi-select and variant choice using native controls if available.
-   Otherwise show a numbered text list and accept e.g. `1=reuse, 2=local-markdown,
-   3=generate, 5=off`. Require the core outputs and the tracking decision.
-   Ask "Will this project use ClickUp?" with explicit yes (`clickup`) and no
-   (`local`) answers on every client unless a confirmed choice already exists.
-   Resolve that decision and the other variants before approval. Mark missing
-   prerequisites as blockers and show which optional phases can be skipped or
-   deferred.
+2. Show every catalog phase in a single checklist, in catalog order, before
+   asking or recommending anything. For every phase show its number, purpose,
+   benefit, cost of skipping, expected artifacts, required or optional status,
+   prerequisites, available variants, and reusable files with paths. Take the
+   benefit and the cost of skipping from "Phase benefits", translated into the
+   user's language. Mark the recommended choice for this project beside each
+   phase. Never shorten the list to the recommended phases. Include extensions
+   only when their contracts provide the same fields, their inputs and outputs,
+   and their state owner.
+   Keep it readable in a terminal: a table has at most four columns (number and
+   phase with its type, benefit, cost of skipping, recommended choice). List
+   artifacts, prerequisites, variants and reusable files below the table, one
+   short entry per phase.
+3. Let the user choose as described in "Choosing phases", with native controls
+   or a numbered text list. Never replace this choice with an approve, adjust or
+   stop question about a prepared plan. Require the core outputs and the
+   tracking decision. Ask "Will this project use ClickUp?" with explicit yes
+   (`clickup`) and no (`local`) answers on every client unless a confirmed
+   choice already exists. Resolve that decision and the other variants before
+   approval. Mark missing prerequisites as blockers and show which optional
+   phases can be skipped or deferred.
 4. Summarize the ordered plan, reuse choices, writes, installs and external actions.
    List every file each phase writes, including the policy record that
    `visual-design` keeps in `design-system/README.md` even for `off`.
@@ -55,6 +64,62 @@ installations or sub-skill dispatches.
    permission to modify existing instructions and any unapproved external writes.
    Routine phase completion requires only a concise result report. Pause safely
    when the user asks to stop, a requirement is unavailable or a phase fails.
+
+## Choosing phases
+
+Required phases are listed with their benefit and are never offered as something
+to select or drop. Omit every question that already has a confirmed choice.
+Variants the user was not asked about keep the recommended value, shown in the
+step 4 summary, where the user can change any of them.
+
+### Native selector
+
+Use the client's question tool when it is available in the current session and
+can offer every pending optional choice at once. Put the phase benefit in each
+option description. For a limit of at most four questions with two to four
+options and multi-select, as in Claude Code, ask in one call:
+
+1. Multi-select: `discovery`, `find-skill`, `registry`, none.
+2. Multi-select, for team work: `team-mode`, `memory-policy`, none.
+3. Single choice, `visual-design` policy: `system-and-mockups`, `system-only`,
+   `off`, `deferred`.
+4. Single choice: ClickUp yes or no.
+
+Offer `reuse` in place of a new run when a usable output exists. If the tool
+lacks multi-select or its limits cannot hold every pending choice, use the
+numbered list instead. Never drop a phase to fit a selector. Never enable an
+experimental client feature or change client settings to obtain a selector.
+
+### Numbered list
+
+When no suitable selector is available, show a numbered text list in a code
+block that fits an 80 column terminal. Keep the catalog numbers, group required
+and optional phases, and give each optional phase its short benefit and
+recommended value. End with the reply format:
+
+- `ok` accepts the recommended choices.
+- `+6 -8` adds phase 6 and drops phase 8 from the recommendation.
+- `3=off, 5=local` sets variants.
+- ClickUp is answered with `clickup yes` or `clickup no`.
+
+An unresolved ClickUp decision stays pending after `ok`, so ask for it. Ask
+again about any number or variant that does not exist. A reply to this list,
+including `ok`, is a selection, not an approval: continue with step 4.
+
+## Phase benefits
+
+| ID | Benefit | If skipped |
+|---|---|---|
+| `discovery` | Tests the problem and its users before they are documented. | The knowledge base rests on unverified assumptions. |
+| `kb` | Every session starts from the same domain facts and decisions. | Required. |
+| `visual-design` | Screens share one agreed visual identity. | The visual policy is asked at the first visual change. |
+| `roadmap` | Work has an order, with visible dependencies. | Required. |
+| `task-management` | Everyone knows where progress is tracked. | Required. |
+| `team-mode` | Each member knows what they own and who reviews it. | No team rules, pull request template or CODEOWNERS. |
+| `memory-policy` | The team agrees whether project memory is shared. | No policy is recorded and memory setup is untouched. |
+| `find-skill` | Surfaces skills that fit the project stack. | Only the installed skills are used. |
+| `registry` | Agents locate the available skills from one index. | Skills are discovered again when needed. |
+| `agents` | Every agent follows the same project rules and references. | Required. |
 
 ## Phase catalog
 
